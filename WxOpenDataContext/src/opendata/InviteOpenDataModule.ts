@@ -106,7 +106,10 @@ export default class InviteOpenDataModule {
 
     private showInviteView(): void {
         if (!this._inviteView) {
-            this._inviteView = new UISocialInviteView(this.handleInviteUser.bind(this));
+            this._inviteView = new UISocialInviteView(
+                this.handleInviteUser.bind(this),
+                this.handleViewClose.bind(this)
+            );
         }
 
         this._inviteView.size(this._stage.width, this._stage.height);
@@ -135,6 +138,10 @@ export default class InviteOpenDataModule {
 
     private handleInviteUser(openid: string): void {
         this.shareToWxFriend(openid);
+    }
+
+    private handleViewClose(): void {
+        this.hideInviteView();
     }
 
     private refreshInviteView(): void {

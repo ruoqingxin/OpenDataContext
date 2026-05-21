@@ -1,28 +1,23 @@
-import { INVITE_VIEW_RES } from "../opendata/OpenDataAssets";
 import { InviteUser, InviteViewState } from "../opendata/types";
 
-interface InviteItemRefs {
-    txtNick: any;
-    imgHead: any;
-    btnInvite: any;
-    txtTitle: any;
-}
+const ITEM_HEIGHT = 88;
 
 export default class UISocialInviteView extends Laya.Sprite {
-    private _state: InviteViewState | null = null;
-    private _root: any = null;
-    private _list: any = null;
-    private _loaded = false;
+    private _listPanel: Laya.Panel | null = null;
+    private _emptyLabel: Laya.Label | null = null;
 
-    constructor(private _onInviteUser: (openid: string) => void) {
+    constructor(
+        private _onInviteUser: (openid: string) => void,
+        private _onClose: () => void
+    ) {
         super();
         this.size(Laya.stage.width, Laya.stage.height);
-        this.loadView();
+        this.buildUI();
     }
 
     public setViewState(state: InviteViewState): void {
-        this._state = state;
-        this.refresh();
+        this.visible = true;
+        this.refreshList(state.users || []);
     }
 
     public onHide(): void {
@@ -33,202 +28,114 @@ export default class UISocialInviteView extends Laya.Sprite {
         this.layoutChildren();
     }
 
-    private loadView(): void {
-        const loadTask: any = Laya.loader.load(INVITE_VIEW_RES);
-        if (loadTask && typeof loadTask.then === "function") {
-            loadTask.then(() => this.onViewLoaded()).catch(() => void 0);
-            return;
-        }
-        Laya.loader.load(INVITE_VIEW_RES, Laya.Handler.create(this, this.onViewLoaded));
-    }
+    private buildUI(): void {
+        this._listPanel = new Laya.Panel();
+        this._listPanel.vScrollBarSkin = "";
+        this.addChild(this._listPanel);
 
-    private onViewLoaded(): void {
-        const loader: any = Laya.loader as any;
-        const root: any = typeof loader.createNodes === "function" ? loader.createNodes(INVITE_VIEW_RES) : null;
-        if (!root) {
-            console.error("[OpenData] 邀请列表预制体加载失败:", INVITE_VIEW_RES);
-            return;
-        }
+        this._emptyLabel = new Laya.Label();
+        this._emptyLabel.text = "暂无可邀请的微信好友";
+        this._emptyLabel.fontSize = 24;
+        this._emptyLabel.color = "#999999";
+        this._emptyLabel.align = "center";
+        this._emptyLabel.valign = "middle";
+        this._emptyLabel.visible = false;
+        this.addChild(this._emptyLabel);
 
-        this._root = root;
-        this.addChild(root);
-        this._list = this.findNodeByName(this._root, "list_items");
-        this._loaded = true;
-        this.layoutChildren();
-        this.refresh();
+        const btnClose = new Laya.Button();
+        btnClose.label = "关闭";
+        btnClose.width = 80;
+        btnClose.height = 40;
+        btnClose.on(Laya.Event.CLICK, this, this._onClose);
+        btnClose.name = "btn_close";
+        this.addChild(btnClose);
     }
 
     private layoutChildren(): void {
-        if (!this._root) {
-            return;
-        }
-        this._root.size(this.width, this.height);
-        const list = this._list;
-        if (list && typeof list.size === "function") {
-            list.width = this.width - (list.x || 0) * 2;
-            list.height = this.height - (list.y || 0);
-        }
-    }
+        const w = this.width;
+        const h = this.height;
 
-    private refresh(): void {
-        if (!this._loaded || !this._state) {
-            return;
+        const btnClose = this.getChildByName("btn_close") as Laya.Button | null;
+        if (btnClose) {
+            btnClose.x = w - btnClose.width - 12;
+            btnClose.y = 8;
         }
-        this.visible = true;
-        this.refreshList(this._state.users);
+
+        const listTop = 52;
+        if (this._listPanel) {
+            this._listPanel.x = 0;
+            this._listPanel.y = listTop;
+            this._listPanel.width = w;
+            this._listPanel.height = Math.max(0, h - listTop);
+        }
+        if (this._emptyLabel) {
+            this._emptyLabel.width = w;
+            this._emptyLabel.height = Math.max(0, h - listTop);
+            this._emptyLabel.y = listTop;
+        }
     }
 
     private refreshList(users: InviteUser[]): void {
-        if (!this._list) {
+        if (!this._listPanel || !this._emptyLabel) {
             return;
         }
 
-        if ("numItems" in this._list && "itemRenderer" in this._list) {
-            this._list.itemRenderer = (index: number, item: any) => {
-                this.applyUserToItem(item, users[index]);
-            };
-            this._list.numItems = users.length;
-            return;
-        }
+        this.layoutChildren();
+        this._listPanel.removeChildren();
 
-        if ("renderHandler" in this._list && "array" in this._list) {
-            this._list.renderHandler = Laya.Handler.create(this, this.renderListItem, null, false);
-            this._list.array = users;
-            if (typeof this._list.refresh === "function") {
-                this._list.refresh();
+        const list = users || [];
+        this._emptyLabel.visible = list.length <= 0;
+        this._listPanel.visible = list.length > 0;
+
+        list.forEach((user, index) => {
+            this._listPanel!.addChild(this.createListItem(user, index));
+        });
+        this._listPanel.refresh();
+    }
+
+    private createListItem(user: InviteUser, index: number): Laya.Box {
+        const item = new Laya.Box();
+        item.width = this.width;
+        item.height = ITEM_HEIGHT;
+        item.y = index * ITEM_HEIGHT;
+
+        const bg = new Laya.Sprite();
+        bg.graphics.drawRect(0, 0, item.width, item.height, "#ffffff");
+        item.addChild(bg);
+
+        const imgHead = new Laya.Image();
+        imgHead.width = 64;
+        imgHead.height = 64;
+        imgHead.x = 16;
+        imgHead.y = 12;
+        if (user.avatarUrl) {
+            imgHead.skin = user.avatarUrl;
+        }
+        item.addChild(imgHead);
+
+        const txtNick = new Laya.Label();
+        txtNick.text = user.nickName || "微信好友";
+        txtNick.fontSize = 26;
+        txtNick.color = "#333333";
+        txtNick.x = 92;
+        txtNick.y = 28;
+        txtNick.width = Math.max(0, item.width - 220);
+        txtNick.overflow = "hidden";
+        item.addChild(txtNick);
+
+        const btnInvite = new Laya.Button();
+        btnInvite.label = "邀请";
+        btnInvite.width = 96;
+        btnInvite.height = 48;
+        btnInvite.x = item.width - btnInvite.width - 16;
+        btnInvite.y = 20;
+        btnInvite.on(Laya.Event.CLICK, this, () => {
+            if (user.openid) {
+                this._onInviteUser(String(user.openid));
             }
-            return;
-        }
+        });
+        item.addChild(btnInvite);
 
-        const count: number = typeof this._list.numChildren === "number" ? this._list.numChildren : 0;
-        const max = Math.min(count, users.length);
-        for (let i = 0; i < max; i++) {
-            const item = this._list.getChildAt?.(i);
-            this.applyUserToItem(item, users[i]);
-        }
-    }
-
-    private renderListItem(arg0: any, arg1: any): void {
-        if (!this._state) {
-            return;
-        }
-
-        let item: any = null;
-        let index = 0;
-        if (typeof arg0 === "number") {
-            index = arg0;
-            item = arg1;
-        } else {
-            item = arg0;
-            index = Number(arg1 || 0);
-        }
-
-        const user = this._state.users[index];
-        if (!user) {
-            return;
-        }
-        this.applyUserToItem(item, user);
-    }
-
-    private applyUserToItem(item: any, user: InviteUser): void {
-        if (!item || !user) {
-            return;
-        }
-        const refs = this.getItemRefs(item);
-
-        this.setText(refs.txtNick, user.nickName);
-        this.setImageSource(refs.imgHead, user.avatarUrl);
-        this.setText(refs.txtTitle, "邀请");
-        this.bindInvite(refs.btnInvite, user);
-    }
-
-    private bindInvite(btnInvite: any, user: InviteUser): void {
-        if (!btnInvite) {
-            return;
-        }
-        btnInvite.__inviteOpenid = user.openid;
-        btnInvite.mouseEnabled = true;
-        btnInvite.touchable = true;
-        if (btnInvite.__inviteBound) {
-            return;
-        }
-        btnInvite.__inviteBound = true;
-        if (typeof btnInvite.on === "function") {
-            btnInvite.on(Laya.Event.CLICK, this, this.handleInviteClick);
-        }
-    }
-
-    private handleInviteClick(evt: Laya.Event): void {
-        const btnInvite: any = evt.currentTarget;
-        const openid = btnInvite?.__inviteOpenid;
-        if (openid) {
-            this._onInviteUser(String(openid));
-        }
-    }
-
-    private getItemRefs(item: any): InviteItemRefs {
-        if (item.__inviteRefs) {
-            return item.__inviteRefs as InviteItemRefs;
-        }
-        const btnInvite = this.findNodeByName(item, "btn_invite");
-        const refs: InviteItemRefs = {
-            txtNick: this.findNodeByName(item, "txt_nick"),
-            imgHead: this.findNodeByName(item, "img_head"),
-            btnInvite,
-            txtTitle: this.findNodeByName(btnInvite, "txt_title"),
-        };
-        item.__inviteRefs = refs;
-        return refs;
-    }
-
-    private setText(node: any, text: string): void {
-        if (!node) {
-            return;
-        }
-        if ("text" in node) {
-            node.text = text;
-        } else if ("title" in node) {
-            node.title = text;
-        }
-    }
-
-    private setImageSource(node: any, url: string): void {
-        if (!node) {
-            return;
-        }
-        if ("url" in node) {
-            node.url = url || "";
-            return;
-        }
-        if ("src" in node) {
-            node.src = url || "";
-            return;
-        }
-        if ("skin" in node) {
-            node.skin = url || "";
-        }
-    }
-
-    private findNodeByName(root: any, name: string): any {
-        if (!root || !name) {
-            return null;
-        }
-        if (typeof root.getChildByName === "function") {
-            const direct = root.getChildByName(name);
-            if (direct) {
-                return direct;
-            }
-        }
-        if (typeof root.numChildren !== "number" || typeof root.getChildAt !== "function") {
-            return null;
-        }
-        for (let i = 0; i < root.numChildren; i++) {
-            const child = root.getChildAt(i);
-            const result = this.findNodeByName(child, name);
-            if (result) {
-                return result;
-            }
-        }
-        return null;
+        return item;
     }
 }

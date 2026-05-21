@@ -1,58 +1,22 @@
 (() => {
   var __defProp = Object.defineProperty;
-  var __defProps = Object.defineProperties;
-  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-  var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
-  var __getOwnPropSymbols = Object.getOwnPropertySymbols;
-  var __hasOwnProp = Object.prototype.hasOwnProperty;
-  var __propIsEnum = Object.prototype.propertyIsEnumerable;
-  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
-  var __spreadValues = (a, b) => {
-    for (var prop in b || (b = {}))
-      if (__hasOwnProp.call(b, prop))
-        __defNormalProp(a, prop, b[prop]);
-    if (__getOwnPropSymbols)
-      for (var prop of __getOwnPropSymbols(b)) {
-        if (__propIsEnum.call(b, prop))
-          __defNormalProp(a, prop, b[prop]);
-      }
-    return a;
-  };
-  var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
-  var __decorateClass = (decorators, target, key, kind) => {
-    var result = kind > 1 ? void 0 : kind ? __getOwnPropDesc(target, key) : target;
-    for (var i = decorators.length - 1, decorator; i >= 0; i--)
-      if (decorator = decorators[i])
-        result = (kind ? decorator(target, key, result) : decorator(result)) || result;
-    if (kind && result)
-      __defProp(target, key, result);
-    return result;
-  };
-
-  // src/opendata/OpenDataAssets.ts
-  var OPEN_DATA_ASSETS = [
-    "res://6b229f5a-2129-47db-9200-9a8e6decad99",
-    "res://6d5fe075-a44e-46c0-ad3f-b0dc5d83ccd1",
-    "res://63f8ea06-febb-4892-bca7-02b9ee46cd23",
-    "res://b6a35890-ea0b-4652-9041-9e3dd20ced53"
-  ];
-  var INVITE_VIEW_RES = OPEN_DATA_ASSETS[0];
+  var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
   // src/module/UISocialInviteView.ts
-  var UISocialInviteView = class extends Laya.Sprite {
-    constructor(_onInviteUser) {
+  var ITEM_HEIGHT = 88;
+  var _UISocialInviteView = class _UISocialInviteView extends Laya.Sprite {
+    constructor(_onInviteUser, _onClose) {
       super();
       this._onInviteUser = _onInviteUser;
-      this._state = null;
-      this._root = null;
-      this._list = null;
-      this._loaded = false;
+      this._onClose = _onClose;
+      this._listPanel = null;
+      this._emptyLabel = null;
       this.size(Laya.stage.width, Laya.stage.height);
-      this.loadView();
+      this.buildUI();
     }
     setViewState(state) {
-      this._state = state;
-      this.refresh();
+      this.visible = true;
+      this.refreshList((state == null ? void 0 : state.users) || []);
     }
     onHide() {
       this.visible = false;
@@ -60,187 +24,97 @@
     layoutView() {
       this.layoutChildren();
     }
-    loadView() {
-      const loadTask = Laya.loader.load(INVITE_VIEW_RES);
-      if (loadTask && typeof loadTask.then === "function") {
-        loadTask.then(() => this.onViewLoaded()).catch(() => void 0);
-        return;
-      }
-      Laya.loader.load(INVITE_VIEW_RES, Laya.Handler.create(this, this.onViewLoaded));
-    }
-    onViewLoaded() {
-      const loader = Laya.loader;
-      const root = typeof loader.createNodes === "function" ? loader.createNodes(INVITE_VIEW_RES) : null;
-      if (!root) {
-        console.error("[OpenData] 邀请列表预制体加载失败:", INVITE_VIEW_RES);
-        return;
-      }
-      this._root = root;
-      this.addChild(root);
-      this._list = this.findNodeByName(this._root, "list_items");
-      this._loaded = true;
-      this.layoutChildren();
-      this.refresh();
+    buildUI() {
+      this._listPanel = new Laya.Panel();
+      this._listPanel.vScrollBarSkin = "";
+      this.addChild(this._listPanel);
+      this._emptyLabel = new Laya.Label();
+      this._emptyLabel.text = "暂无可邀请的微信好友";
+      this._emptyLabel.fontSize = 24;
+      this._emptyLabel.color = "#999999";
+      this._emptyLabel.align = "center";
+      this._emptyLabel.valign = "middle";
+      this._emptyLabel.visible = false;
+      this.addChild(this._emptyLabel);
+      const btnClose = new Laya.Button();
+      btnClose.label = "关闭";
+      btnClose.width = 80;
+      btnClose.height = 40;
+      btnClose.on(Laya.Event.CLICK, this, this._onClose);
+      btnClose.name = "btn_close";
+      this.addChild(btnClose);
     }
     layoutChildren() {
-      if (!this._root) {
-        return;
+      const w = this.width;
+      const h = this.height;
+      const btnClose = this.getChildByName("btn_close");
+      if (btnClose) {
+        btnClose.x = w - btnClose.width - 12;
+        btnClose.y = 8;
       }
-      this._root.size(this.width, this.height);
-      const list = this._list;
-      if (list && typeof list.size === "function") {
-        list.width = this.width - (list.x || 0) * 2;
-        list.height = this.height - (list.y || 0);
-      }
-    }
-    refresh() {
-      if (!this._loaded || !this._state) {
-        return;
-      }
-      this.visible = true;
-      this.refreshList(this._state.users);
+      const listTop = 52;
+      this._listPanel.x = 0;
+      this._listPanel.y = listTop;
+      this._listPanel.width = w;
+      this._listPanel.height = Math.max(0, h - listTop);
+      this._emptyLabel.width = w;
+      this._emptyLabel.height = Math.max(0, h - listTop);
+      this._emptyLabel.y = listTop;
     }
     refreshList(users) {
-      var _a, _b;
-      if (!this._list) {
-        return;
+      this.layoutChildren();
+      this._listPanel.removeChildren();
+      const list = users || [];
+      this._emptyLabel.visible = list.length <= 0;
+      this._listPanel.visible = list.length > 0;
+      list.forEach((user, index) => {
+        this._listPanel.addChild(this.createListItem(user, index));
+      });
+      this._listPanel.refresh();
+    }
+    createListItem(user, index) {
+      const item = new Laya.Box();
+      item.width = this.width;
+      item.height = ITEM_HEIGHT;
+      item.y = index * ITEM_HEIGHT;
+      const bg = new Laya.Sprite();
+      bg.graphics.drawRect(0, 0, item.width, item.height, "#ffffff");
+      item.addChild(bg);
+      const imgHead = new Laya.Image();
+      imgHead.width = 64;
+      imgHead.height = 64;
+      imgHead.x = 16;
+      imgHead.y = 12;
+      if (user.avatarUrl) {
+        imgHead.skin = user.avatarUrl;
       }
-      if ("numItems" in this._list && "itemRenderer" in this._list) {
-        this._list.itemRenderer = (index, item) => {
-          this.applyUserToItem(item, users[index]);
-        };
-        this._list.numItems = users.length;
-        return;
-      }
-      if ("renderHandler" in this._list && "array" in this._list) {
-        this._list.renderHandler = Laya.Handler.create(this, this.renderListItem, null, false);
-        this._list.array = users;
-        if (typeof this._list.refresh === "function") {
-          this._list.refresh();
+      item.addChild(imgHead);
+      const txtNick = new Laya.Label();
+      txtNick.text = user.nickName || "微信好友";
+      txtNick.fontSize = 26;
+      txtNick.color = "#333333";
+      txtNick.x = 92;
+      txtNick.y = 28;
+      txtNick.width = Math.max(0, item.width - 220);
+      txtNick.overflow = "hidden";
+      item.addChild(txtNick);
+      const btnInvite = new Laya.Button();
+      btnInvite.label = "邀请";
+      btnInvite.width = 96;
+      btnInvite.height = 48;
+      btnInvite.x = item.width - btnInvite.width - 16;
+      btnInvite.y = 20;
+      btnInvite.on(Laya.Event.CLICK, this, () => {
+        if (user.openid) {
+          this._onInviteUser(String(user.openid));
         }
-        return;
-      }
-      const count = typeof this._list.numChildren === "number" ? this._list.numChildren : 0;
-      const max = Math.min(count, users.length);
-      for (let i = 0; i < max; i++) {
-        const item = (_b = (_a = this._list).getChildAt) == null ? void 0 : _b.call(_a, i);
-        this.applyUserToItem(item, users[i]);
-      }
-    }
-    renderListItem(arg0, arg1) {
-      if (!this._state) {
-        return;
-      }
-      let item = null;
-      let index = 0;
-      if (typeof arg0 === "number") {
-        index = arg0;
-        item = arg1;
-      } else {
-        item = arg0;
-        index = Number(arg1 || 0);
-      }
-      const user = this._state.users[index];
-      if (!user) {
-        return;
-      }
-      this.applyUserToItem(item, user);
-    }
-    applyUserToItem(item, user) {
-      if (!item || !user) {
-        return;
-      }
-      const refs = this.getItemRefs(item);
-      this.setText(refs.txtNick, user.nickName);
-      this.setImageSource(refs.imgHead, user.avatarUrl);
-      this.setText(refs.txtTitle, "邀请");
-      this.bindInvite(refs.btnInvite, user);
-    }
-    bindInvite(btnInvite, user) {
-      if (!btnInvite) {
-        return;
-      }
-      btnInvite.__inviteOpenid = user.openid;
-      btnInvite.mouseEnabled = true;
-      btnInvite.touchable = true;
-      if (btnInvite.__inviteBound) {
-        return;
-      }
-      btnInvite.__inviteBound = true;
-      if (typeof btnInvite.on === "function") {
-        btnInvite.on(Laya.Event.CLICK, this, this.handleInviteClick);
-      }
-    }
-    handleInviteClick(evt) {
-      const btnInvite = evt.currentTarget;
-      const openid = btnInvite == null ? void 0 : btnInvite.__inviteOpenid;
-      if (openid) {
-        this._onInviteUser(String(openid));
-      }
-    }
-    getItemRefs(item) {
-      if (item.__inviteRefs) {
-        return item.__inviteRefs;
-      }
-      const btnInvite = this.findNodeByName(item, "btn_invite");
-      const refs = {
-        txtNick: this.findNodeByName(item, "txt_nick"),
-        imgHead: this.findNodeByName(item, "img_head"),
-        btnInvite,
-        txtTitle: this.findNodeByName(btnInvite, "txt_title")
-      };
-      item.__inviteRefs = refs;
-      return refs;
-    }
-    setText(node, text) {
-      if (!node) {
-        return;
-      }
-      if ("text" in node) {
-        node.text = text;
-      } else if ("title" in node) {
-        node.title = text;
-      }
-    }
-    setImageSource(node, url) {
-      if (!node) {
-        return;
-      }
-      if ("url" in node) {
-        node.url = url || "";
-        return;
-      }
-      if ("src" in node) {
-        node.src = url || "";
-        return;
-      }
-      if ("skin" in node) {
-        node.skin = url || "";
-      }
-    }
-    findNodeByName(root, name) {
-      if (!root || !name) {
-        return null;
-      }
-      if (typeof root.getChildByName === "function") {
-        const direct = root.getChildByName(name);
-        if (direct) {
-          return direct;
-        }
-      }
-      if (typeof root.numChildren !== "number" || typeof root.getChildAt !== "function") {
-        return null;
-      }
-      for (let i = 0; i < root.numChildren; i++) {
-        const child = root.getChildAt(i);
-        const result = this.findNodeByName(child, name);
-        if (result) {
-          return result;
-        }
-      }
-      return null;
+      });
+      item.addChild(btnInvite);
+      return item;
     }
   };
+  __name(_UISocialInviteView, "UISocialInviteView");
+  var UISocialInviteView = _UISocialInviteView;
 
   // src/opendata/OpenDataCommand.ts
   var OpenDataCommand = {
@@ -251,7 +125,7 @@
   };
 
   // src/opendata/InviteOpenDataModule.ts
-  var InviteOpenDataModule = class {
+  var _InviteOpenDataModule = class _InviteOpenDataModule {
     constructor(_stage) {
       this._stage = _stage;
       this._users = [];
@@ -311,7 +185,10 @@
     }
     showInviteView() {
       if (!this._inviteView) {
-        this._inviteView = new UISocialInviteView(this.handleInviteUser.bind(this));
+        this._inviteView = new UISocialInviteView(
+          this.handleInviteUser.bind(this),
+          this.handleViewClose.bind(this)
+        );
       }
       this._inviteView.size(this._stage.width, this._stage.height);
       this.refreshInviteView();
@@ -335,6 +212,9 @@
     }
     handleInviteUser(openid) {
       this.shareToWxFriend(openid);
+    }
+    handleViewClose() {
+      this.hideInviteView();
     }
     refreshInviteView() {
       if (!this._inviteView) {
@@ -393,13 +273,11 @@
       };
       const wxApi = wx;
       if (wxApi.shareMessageToFriend) {
-        wxApi.shareMessageToFriend(__spreadProps(__spreadValues({}, sharePayload), { openId: openid }));
+        wxApi.shareMessageToFriend(Object.assign({ openId: openid }, sharePayload));
         return;
       }
       if (wxApi.shareAppMessage) {
-        wxApi.shareAppMessage(__spreadProps(__spreadValues({}, sharePayload), {
-          imageUrlId: this._shareConfig.shareImageUrlId
-        }));
+        wxApi.shareAppMessage(Object.assign({ imageUrlId: this._shareConfig.shareImageUrlId }, sharePayload));
       }
     }
     pickDisplayName(item) {
@@ -416,9 +294,31 @@
       };
     }
   };
+  __name(_InviteOpenDataModule, "InviteOpenDataModule");
+  var InviteOpenDataModule = _InviteOpenDataModule;
+
+  // src/opendata/WxOpenDataBridge.ts
+  var _WxOpenDataBridge = class _WxOpenDataBridge {
+    onMessage(handler) {
+      const wxApi = typeof wx !== "undefined" ? wx : null;
+      if (!(wxApi == null ? void 0 : wxApi.onMessage)) {
+        return;
+      }
+      const engineHandler = Laya.MiniAdpter && Laya.MiniAdpter._onMessage;
+      wxApi.onMessage((data) => {
+        if (typeof engineHandler === "function") {
+          engineHandler(data);
+        }
+        const message = data && typeof data.type === "string" ? data : { type: "" };
+        handler(message);
+      });
+    }
+  };
+  __name(_WxOpenDataBridge, "WxOpenDataBridge");
+  var WxOpenDataBridge = _WxOpenDataBridge;
 
   // src/opendata/OpenDataApp.ts
-  var OpenDataApp = class {
+  var _OpenDataApp = class _OpenDataApp {
     constructor(_stage, _bridge) {
       this._stage = _stage;
       this._bridge = _bridge;
@@ -434,58 +334,16 @@
       this._stage.on(Laya.Event.RESIZE, this._inviteModule, this._inviteModule.onStageResize);
     }
   };
-
-  // src/opendata/WxOpenDataBridge.ts
-  var WxOpenDataBridge = class {
-    onMessage(handler) {
-      const wxApi = typeof wx !== "undefined" ? wx : null;
-      if (!(wxApi == null ? void 0 : wxApi.onMessage)) {
-        return;
-      }
-      const engineHandler = this.getEngineMessageHandler();
-      wxApi.onMessage((data) => {
-        if (typeof engineHandler === "function") {
-          engineHandler(data);
-        }
-        const message = data && typeof data.type === "string" ? data : { type: "" };
-        handler(message);
-      });
-    }
-    getEngineMessageHandler() {
-      var _a, _b;
-      const laya = Laya;
-      return (_b = (_a = laya.MiniAdpter) == null ? void 0 : _a._onMessage) != null ? _b : null;
-    }
-  };
+  __name(_OpenDataApp, "OpenDataApp");
+  var OpenDataApp = _OpenDataApp;
 
   // src/Main.ts
-  var { regClass } = Laya;
-  var Main = class extends Laya.Script {
-    constructor() {
-      super(...arguments);
-      this._openDataApp = null;
-    }
-    onAwake() {
-      this.preloadOpenDataAssets().catch((err) => console.error("[OpenData] 资源预加载失败:", err)).then(() => this.startOpenDataApp());
-    }
-    startOpenDataApp() {
-      this._openDataApp = new OpenDataApp(Laya.stage, new WxOpenDataBridge());
-      this._openDataApp.start();
-    }
-    preloadOpenDataAssets() {
-      const tasks = OPEN_DATA_ASSETS.map((url) => {
-        const task = Laya.loader.load(url);
-        if (task && typeof task.then === "function") {
-          return task;
-        }
-        return new Promise((resolve) => {
-          Laya.loader.load(url, Laya.Handler.create(null, () => resolve()));
-        });
-      });
-      return Promise.all(tasks).then(() => void 0);
-    }
-  };
-  Main = __decorateClass([
-    regClass("e60XQm7tTY2BwFAdxb8D1g")
-  ], Main);
+  var DESIGN_WIDTH = 720;
+  var DESIGN_HEIGHT = 480;
+  Laya.init(DESIGN_WIDTH, DESIGN_HEIGHT);
+  Laya.stage.scaleMode = Laya.Stage.SCALE_SHOWALL;
+  Laya.stage.alignV = Laya.Stage.ALIGN_MIDDLE;
+  Laya.stage.alignH = Laya.Stage.ALIGN_CENTER;
+  const openDataApp = new OpenDataApp(Laya.stage, new WxOpenDataBridge());
+  openDataApp.start();
 })();
