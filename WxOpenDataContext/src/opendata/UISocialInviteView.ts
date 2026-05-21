@@ -23,8 +23,8 @@ const ITEM_BTN_TEXT = { text: "邀请", fontSize: 32, color: "#f8fde4", stroke: 
 export default class UISocialInviteView extends Laya.Sprite {
     private _listPanel = new Laya.Panel();
     private _emptyLabel = new Laya.Label();
-    private _scaleX = 1;
-    private _scaleY = 1;
+    private _layoutScaleX = 1;
+    private _layoutScaleY = 1;
     private _itemWidth = ITEM.width;
 
     constructor(private _onInvite: (openid: string) => void) {
@@ -58,14 +58,14 @@ export default class UISocialInviteView extends Laya.Sprite {
     public layout(): void {
         const w = this.width;
         const h = this.height;
-        this._scaleX = w / DESIGN_W;
-        this._scaleY = h / DESIGN_H;
-        this._itemWidth = ITEM.width * this._scaleX;
+        this._layoutScaleX = w / DESIGN_W;
+        this._layoutScaleY = h / DESIGN_H;
+        this._itemWidth = ITEM.width * this._layoutScaleX;
 
-        const listX = LIST.x * this._scaleX;
-        const listY = LIST.y * this._scaleY;
+        const listX = LIST.x * this._layoutScaleX;
+        const listY = LIST.y * this._layoutScaleY;
         const listW = w - listX * 2;
-        const listH = h - listY - LIST.bottom * this._scaleY;
+        const listH = h - listY - LIST.bottom * this._layoutScaleY;
 
         this._listPanel.pos(listX, listY);
         this._listPanel.size(listW, listH);
@@ -74,8 +74,8 @@ export default class UISocialInviteView extends Laya.Sprite {
     }
 
     private createItem(user: InviteUser, index: number): Laya.Box {
-        const sx = this._scaleX;
-        const sy = this._scaleY;
+        const sx = this._layoutScaleX;
+        const sy = this._layoutScaleY;
         const itemH = ITEM.height * sy;
         const itemW = this._itemWidth;
 

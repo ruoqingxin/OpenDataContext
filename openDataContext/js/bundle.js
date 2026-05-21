@@ -1,6 +1,33 @@
 (() => {
   var __defProp = Object.defineProperty;
-  var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+  var __defProps = Object.defineProperties;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
+  var __getOwnPropSymbols = Object.getOwnPropertySymbols;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __propIsEnum = Object.prototype.propertyIsEnumerable;
+  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __spreadValues = (a, b) => {
+    for (var prop in b || (b = {}))
+      if (__hasOwnProp.call(b, prop))
+        __defNormalProp(a, prop, b[prop]);
+    if (__getOwnPropSymbols)
+      for (var prop of __getOwnPropSymbols(b)) {
+        if (__propIsEnum.call(b, prop))
+          __defNormalProp(a, prop, b[prop]);
+      }
+    return a;
+  };
+  var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
+  var __decorateClass = (decorators, target, key, kind) => {
+    var result = kind > 1 ? void 0 : kind ? __getOwnPropDesc(target, key) : target;
+    for (var i = decorators.length - 1, decorator; i >= 0; i--)
+      if (decorator = decorators[i])
+        result = (kind ? decorator(target, key, result) : decorator(result)) || result;
+    if (kind && result)
+      __defProp(target, key, result);
+    return result;
+  };
 
   // src/opendata/OpenDataAssets.ts
   var OPEN_DATA_IMAGES = {
@@ -28,15 +55,15 @@
   var ITEM_HEAD = { x: 38, y: 64, size: 100 };
   var ITEM_NICK = { x: 162, y: 95, width: 270, height: 37, fontSize: 32, color: "#8a5839", strokeColor: "#373899" };
   var ITEM_BTN = { cx: 582, cy: 114, width: 161, height: 64 };
-  var ITEM_BTN_TEXT = { fontSize: 32, color: "#f8fde4", stroke: 4, strokeColor: "#4d7b26" };
-  var _UISocialInviteView = class _UISocialInviteView extends Laya.Sprite {
+  var ITEM_BTN_TEXT = { text: "邀请", fontSize: 32, color: "#f8fde4", stroke: 4, strokeColor: "#4d7b26" };
+  var UISocialInviteView = class extends Laya.Sprite {
     constructor(_onInvite) {
       super();
       this._onInvite = _onInvite;
       this._listPanel = new Laya.Panel();
       this._emptyLabel = new Laya.Label();
-      this._scaleX = 1;
-      this._scaleY = 1;
+      this._layoutScaleX = 1;
+      this._layoutScaleY = 1;
       this._itemWidth = ITEM.width;
       this._listPanel.vScrollBarSkin = "";
       this.addChild(this._listPanel);
@@ -63,21 +90,21 @@
     layout() {
       const w = this.width;
       const h = this.height;
-      this._scaleX = w / DESIGN_W;
-      this._scaleY = h / DESIGN_H;
-      this._itemWidth = ITEM.width * this._scaleX;
-      const listX = LIST.x * this._scaleX;
-      const listY = LIST.y * this._scaleY;
+      this._layoutScaleX = w / DESIGN_W;
+      this._layoutScaleY = h / DESIGN_H;
+      this._itemWidth = ITEM.width * this._layoutScaleX;
+      const listX = LIST.x * this._layoutScaleX;
+      const listY = LIST.y * this._layoutScaleY;
       const listW = w - listX * 2;
-      const listH = h - listY - LIST.bottom * this._scaleY;
+      const listH = h - listY - LIST.bottom * this._layoutScaleY;
       this._listPanel.pos(listX, listY);
       this._listPanel.size(listW, listH);
       this._emptyLabel.pos(listX, listY);
       this._emptyLabel.size(listW, listH);
     }
     createItem(user, index) {
-      const sx = this._scaleX;
-      const sy = this._scaleY;
+      const sx = this._layoutScaleX;
+      const sy = this._layoutScaleY;
       const itemH = ITEM.height * sy;
       const itemW = this._itemWidth;
       const item = new Laya.Box();
@@ -116,7 +143,7 @@
       btnInvite.on(Laya.Event.CLICK, this, () => this._onInvite(user.openid));
       item.addChild(btnInvite);
       const txtTitle = new Laya.Label();
-      txtTitle.text = "邀请";
+      txtTitle.text = ITEM_BTN_TEXT.text;
       txtTitle.fontSize = ITEM_BTN_TEXT.fontSize * sy;
       txtTitle.color = ITEM_BTN_TEXT.color;
       txtTitle.stroke = ITEM_BTN_TEXT.stroke;
@@ -130,11 +157,9 @@
       return item;
     }
   };
-  __name(_UISocialInviteView, "UISocialInviteView");
-  var UISocialInviteView = _UISocialInviteView;
 
   // src/opendata/InviteOpenDataModule.ts
-  var _InviteOpenDataModule = class _InviteOpenDataModule {
+  var InviteOpenDataModule = class {
     constructor(_stage) {
       this._stage = _stage;
       this._users = [];
@@ -168,7 +193,9 @@
           break;
         case OpenDataCommand.UpdateViewPort: {
           const box = message.box;
-          if (!box) break;
+          if (!box) {
+            break;
+          }
           const width = Math.max(1, Math.floor(Number(box.width) || 0));
           const height = Math.max(1, Math.floor(Number(box.height) || 0));
           this._stage.size(width, height);
@@ -183,7 +210,9 @@
       }
     }
     onStageResize() {
-      if (!this._inviteView) return;
+      if (!this._inviteView) {
+        return;
+      }
       this._inviteView.size(this._stage.width, this._stage.height);
       this._inviteView.layout();
     }
@@ -193,7 +222,9 @@
       }
       this._inviteView.size(this._stage.width, this._stage.height);
       this._inviteView.setUsers(this._users);
-      if (!this._inviteView.parent) this._stage.addChild(this._inviteView);
+      if (!this._inviteView.parent) {
+        this._stage.addChild(this._inviteView);
+      }
       this._inviteView.visible = true;
     }
     hideView() {
@@ -207,7 +238,9 @@
       }
     }
     loadFriends() {
-      if (this._loadingFriends || this._loadedFriends || typeof wx === "undefined" || !wx.getFriendCloudStorage) return;
+      if (this._loadingFriends || this._loadedFriends || typeof wx === "undefined" || !wx.getFriendCloudStorage) {
+        return;
+      }
       this._loadingFriends = true;
       wx.getFriendCloudStorage({
         keyList: ["invite_tag"],
@@ -216,7 +249,9 @@
           this._loadedFriends = true;
           this.refreshView();
         },
-        complete: () => { this._loadingFriends = false; }
+        complete: () => {
+          this._loadingFriends = false;
+        }
       });
     }
     mapFriends(list) {
@@ -224,7 +259,9 @@
       const seen = /* @__PURE__ */ new Set();
       for (const item of list) {
         const openid = typeof (item == null ? void 0 : item.openid) === "string" ? item.openid.trim() : "";
-        if (!openid || seen.has(openid)) continue;
+        if (!openid || seen.has(openid)) {
+          continue;
+        }
         seen.add(openid);
         const name = (item == null ? void 0 : item.nickName) || (item == null ? void 0 : item.nickname);
         result.push({
@@ -236,46 +273,74 @@
       return result;
     }
     shareToFriend(openid) {
-      if (typeof wx === "undefined") return;
+      if (typeof wx === "undefined") {
+        return;
+      }
       const query = "room_id=" + encodeURIComponent(String(this._shareConfig.roomId)) + "&room_name=" + encodeURIComponent(this._shareConfig.roomName) + "&invite_openid=" + encodeURIComponent(openid);
-      const payload = { title: this._shareConfig.shareTxt, imageUrl: this._shareConfig.shareImageUrl, query };
+      const payload = {
+        title: this._shareConfig.shareTxt,
+        imageUrl: this._shareConfig.shareImageUrl,
+        query
+      };
       const wxApi = wx;
       if (wxApi.shareMessageToFriend) {
-        wxApi.shareMessageToFriend(Object.assign({ openId: openid }, payload));
+        wxApi.shareMessageToFriend(__spreadProps(__spreadValues({}, payload), { openId: openid }));
       } else if (wxApi.shareAppMessage) {
-        wxApi.shareAppMessage(Object.assign({ imageUrlId: this._shareConfig.shareImageUrlId }, payload));
+        wxApi.shareAppMessage(__spreadProps(__spreadValues({}, payload), { imageUrlId: this._shareConfig.shareImageUrlId }));
       }
     }
   };
-  __name(_InviteOpenDataModule, "InviteOpenDataModule");
-  var InviteOpenDataModule = _InviteOpenDataModule;
 
   // src/Main.ts
+  var { regClass } = Laya;
   var DESIGN_WIDTH = 720;
   var DESIGN_HEIGHT = 1280;
+  var _started = false;
   function preloadAssets() {
     const tasks = OPEN_DATA_ASSETS.map((url) => {
       const task = Laya.loader.load(url);
-      if (task && typeof task.then === "function") return task;
+      if (task && typeof task.then === "function") {
+        return task;
+      }
       return new Promise((resolve) => {
         Laya.loader.load(url, Laya.Handler.create(null, () => resolve()));
       });
     });
     return Promise.all(tasks).then(() => void 0);
   }
-  Laya.init(DESIGN_WIDTH, DESIGN_HEIGHT);
-  Laya.stage.scaleMode = Laya.Stage.SCALE_SHOWALL;
-  Laya.stage.alignV = Laya.Stage.ALIGN_MIDDLE;
-  Laya.stage.alignH = Laya.Stage.ALIGN_CENTER;
-  const inviteModule = new InviteOpenDataModule(Laya.stage);
-  preloadAssets().catch((err) => console.error("[OpenData] 资源预加载失败:", err)).then(() => {
-    if (typeof wx !== "undefined" && wx.onMessage) {
-      const engineHandler = Laya.MiniAdpter && Laya.MiniAdpter._onMessage;
-      wx.onMessage((data) => {
-        if (typeof engineHandler === "function") engineHandler(data);
-        inviteModule.handleMessage(data && typeof data.type === "string" ? data : { type: "" });
-      });
+  function startOpenData() {
+    if (_started) {
+      return;
     }
-    Laya.stage.on(Laya.Event.RESIZE, inviteModule, inviteModule.onStageResize);
-  });
+    _started = true;
+    Laya.init(DESIGN_WIDTH, DESIGN_HEIGHT);
+    Laya.stage.scaleMode = Laya.Stage.SCALE_SHOWALL;
+    Laya.stage.alignV = Laya.Stage.ALIGN_MIDDLE;
+    Laya.stage.alignH = Laya.Stage.ALIGN_CENTER;
+    const inviteModule = new InviteOpenDataModule(Laya.stage);
+    preloadAssets().catch((err) => console.error("[OpenData] 资源预加载失败:", err)).then(() => {
+      var _a;
+      if (typeof wx !== "undefined" && wx.onMessage) {
+        const engineHandler = (_a = Laya.MiniAdpter) == null ? void 0 : _a._onMessage;
+        wx.onMessage((data) => {
+          if (typeof engineHandler === "function") {
+            engineHandler(data);
+          }
+          inviteModule.handleMessage(
+            data && typeof data.type === "string" ? data : { type: "" }
+          );
+        });
+      }
+      Laya.stage.on(Laya.Event.RESIZE, inviteModule, inviteModule.onStageResize);
+    });
+  }
+  var Main = class extends Laya.Script {
+    onAwake() {
+      startOpenData();
+    }
+  };
+  Main = __decorateClass([
+    regClass("e60XQm7tTY2BwFAdxb8D1g")
+  ], Main);
+  startOpenData();
 })();

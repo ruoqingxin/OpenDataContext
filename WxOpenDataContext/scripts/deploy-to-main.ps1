@@ -35,7 +35,7 @@ $viewTsPath = Join-Path $ProjectRoot "src\opendata\UISocialInviteView.ts"
 $assetsTsPath = Join-Path $ProjectRoot "src\opendata\OpenDataAssets.ts"
 $bundleTime = (Get-Item $bundlePath).LastWriteTimeUtc
 $staleSources = @($prefabPath, $viewTsPath, $assetsTsPath) | Where-Object {
-    Test-Path $_ -and (Get-Item $_).LastWriteTimeUtc -gt $bundleTime
+    (Test-Path $_) -and ((Get-Item $_).LastWriteTimeUtc -gt $bundleTime)
 }
 if ($staleSources.Count -gt 0) {
     Write-Error @(
@@ -73,7 +73,7 @@ if (-not (Test-Path $libsDir)) {
     New-Item -ItemType Directory -Path $libsDir -Force | Out-Null
 }
 
-foreach ($lib in @("laya.core.js", "laya.webgl_2D.js", "laya.ui2.js", "laya.adapter-weixin.js")) {
+foreach ($lib in @("laya.core.js", "laya.webgl_2D.js", "laya.ui2.js", "laya.ui.js", "laya.adapter-weixin.js")) {
     $path = Join-Path $libsDir $lib
     if (Test-Path $path) { Remove-Item -Path $path -Force }
 }

@@ -1,5 +1,6 @@
-import UISocialInviteView from "./UISocialInviteView";
+
 import { InviteUser, OpenDataCommand, OpenDataMessage } from "./types";
+import UISocialInviteView from "./UISocialInviteView";
 
 interface WxFriendItem {
     openid?: string;

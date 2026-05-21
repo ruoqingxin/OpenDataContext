@@ -5639,6 +5639,8 @@ declare namespace wx {
    * 监听主域发送的消息
    */
   export function onMessage(callback: Function): void;
+  /** 获取开放数据域与主域共享的 canvas */
+  export function getSharedCanvas(): HTMLCanvasElement;
   /**
    * 拉取当前用户所有同玩好友的托管数据。该接口只可在开放数据域下使用
    */
