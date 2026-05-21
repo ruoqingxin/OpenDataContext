@@ -2,6 +2,7 @@ require("./weapp-adapter.js");
 
 const style = require("./render/style.js");
 const tplFn = require("./render/tplfn.js");
+const localImages = require("./render/assets.js");
 const Layout = require("./engine.js").default;
 
 const sharedCanvas = wx.getSharedCanvas();
@@ -25,6 +26,84 @@ let users = [];
 let visible = false;
 let loadingFriends = false;
 let loadedFriends = false;
+let imagesReady = false;
+let imagesLoading = false;
+let imageLoadQueue = [];
+
+function resolveLocalImage(storedPath) {
+    if (!storedPath || /^https?:\/\//i.test(storedPath)) {
+        return storedPath;
+    }
+
+    const normalized = storedPath.replace(/^\.\//, "");
+    const shortPath =
+        normalized.indexOf("openDataContext/") === 0
+            ? normalized.slice("openDataContext/".length)
+            : normalized;
+    const gameRootPath =
+        normalized.indexOf("openDataContext/") === 0
+            ? normalized
+            : "openDataContext/" + normalized;
+
+    const candidates = [shortPath, "./" + shortPath, gameRootPath, "./" + gameRootPath];
+    const tried = [];
+    if (typeof wx !== "undefined" && wx.getFileSystemManager) {
+        const fs = wx.getFileSystemManager();
+        for (let i = 0; i < candidates.length; i++) {
+            const candidate = candidates[i];
+            if (tried.indexOf(candidate) >= 0) {
+                continue;
+            }
+            tried.push(candidate);
+            try {
+                fs.accessSync(candidate);
+                return gameRootPath;
+            } catch (err) {
+                // try next candidate
+            }
+        }
+        console.warn(
+            "[OpenData] image not found, expected under openDataContext/image/:",
+            gameRootPath,
+            "tried:",
+            tried.join(", ")
+        );
+    }
+    return gameRootPath;
+}
+
+function ensureImagesLoaded(callback) {
+    if (imagesReady) {
+        callback();
+        return;
+    }
+    imageLoadQueue.push(callback);
+    if (imagesLoading) {
+        return;
+    }
+    imagesLoading = true;
+    const sources = localImages.map(resolveLocalImage);
+    const finish = function () {
+        imagesReady = true;
+        imagesLoading = false;
+        const queue = imageLoadQueue.slice();
+        imageLoadQueue.length = 0;
+        for (let i = 0; i < queue.length; i++) {
+            queue[i]();
+        }
+    };
+    if (typeof Layout.loadImgs === "function") {
+        Layout.loadImgs(sources)
+            .then(finish)
+            .catch(function (err) {
+                console.error("[OpenData] Layout.loadImgs failed:", err);
+                imagesLoading = false;
+                imageLoadQueue.length = 0;
+            });
+        return;
+    }
+    finish();
+}
 
 function mapFriends(list) {
     const result = [];
@@ -54,19 +133,48 @@ function loadFriends(done) {
         return;
     }
     loadingFriends = true;
+
+    let cloudFriends = [];
+    let potentialFriends = [];
+    let pending = 0;
+    let settled = false;
+
+    function finishSource() {
+        pending--;
+        if (pending > 0 || settled) {
+            return;
+        }
+        settled = true;
+        users = mapFriends(cloudFriends.concat(potentialFriends));
+        loadedFriends = true;
+        loadingFriends = false;
+        if (typeof done === "function") {
+            done();
+        }
+    }
+
+    function startSource() {
+        pending++;
+    }
+
+    startSource();
     wx.getFriendCloudStorage({
-        keyList: ["invite_tag"],
+        keyList: ["kv_data"],
         success: function (res) {
-            users = mapFriends(Array.isArray(res && res.data) ? res.data : []);
-            loadedFriends = true;
-            if (typeof done === "function") {
-                done();
-            }
+            cloudFriends = Array.isArray(res && res.data) ? res.data : [];
         },
-        complete: function () {
-            loadingFriends = false;
-        },
+        complete: finishSource,
     });
+
+    if (typeof wx.getPotentialFriendList === "function") {
+        startSource();
+        wx.getPotentialFriendList({
+            success: function (res) {
+                potentialFriends = Array.isArray(res && res.list) ? res.list : [];
+            },
+            complete: finishSource,
+        });
+    }
 }
 
 function shareToFriend(openid) {
@@ -106,11 +214,13 @@ function draw() {
     if (!visible) {
         return;
     }
-    const template = tplFn({ data: users });
-    Layout.clear();
-    Layout.init(template, style);
-    Layout.layout(sharedContext);
-    bindInviteEvents();
+    ensureImagesLoaded(function () {
+        const template = tplFn({ data: users });
+        Layout.clear();
+        Layout.init(template, style);
+        Layout.layout(sharedContext);
+        bindInviteEvents();
+    });
 }
 
 function showInvite(message) {
@@ -123,13 +233,11 @@ function showInvite(message) {
     };
     visible = true;
     loadFriends(draw);
-    draw();
 }
 
 function hideInvite() {
     visible = false;
     Layout.clear();
-    Layout.layout(sharedContext);
 }
 
 function init() {

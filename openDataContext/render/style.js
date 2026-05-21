@@ -30,10 +30,20 @@ module.exports = {
     item: {
         width: 688,
         height: 185,
+        position: "relative",
+    },
+    itemBg: {
+        position: "absolute",
+        left: 0,
+        top: 28,
+        width: 688,
+        height: 172,
+    },
+    itemRow: {
+        width: 688,
+        height: 200,
         flexDirection: "row",
         alignItems: "center",
-        backgroundImage: "image/ui_frame_qswj_d.png",
-        backgroundImageType: "simple",
         paddingLeft: 38,
         paddingRight: 26,
         paddingTop: 64,

@@ -17,14 +17,16 @@ function tplFunc(it) {
         out += '<scrollview id="list" class="list">';
         for (var i = 0; i < data.length; i++) {
             var item = data[i];
-            var avatar = item.avatarUrl ? item.avatarUrl : "image/icon_800000.png";
+            var avatar = item.avatarUrl ? item.avatarUrl : "openDataContext/image/icon_800000.png";
             out += '<view class="item">';
+            out += '<image class="itemBg" src="openDataContext/image/ui_frame_qswj_d.png"></image>';
+            out += '<view class="itemRow">';
             out += '<image class="itemHead" src="' + escapeAttr(avatar) + '"></image>';
             out += '<text class="itemNick" value="' + escapeAttr(item.nickName || "玩家昵称") + '"></text>';
             out += '<view class="itemBtnWrap">';
-            out += '<image id="btn_' + i + '" class="itemBtn" src="image/ui_btn_ty_g2.png"></image>';
+            out += '<image id="btn_' + i + '" class="itemBtn" src="openDataContext/image/ui_btn_ty_g2.png"></image>';
             out += '<text class="itemBtnText" value="邀请"></text>';
-            out += "</view></view>";
+            out += "</view></view></view>";
         }
         out += "</scrollview>";
     }

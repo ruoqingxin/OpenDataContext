@@ -71,6 +71,18 @@ Get-ChildItem -Path $imageSource -Filter "*.png" | ForEach-Object {
     Copy-Item -Path $_.FullName -Destination $imageTarget -Force
 }
 
+$requiredImages = @(
+    "image\ui_frame_qswj_d.png",
+    "image\ui_btn_ty_g2.png",
+    "image\icon_800000.png"
+)
+foreach ($relPath in $requiredImages) {
+    $fullPath = Join-Path $TargetDir $relPath
+    if (-not (Test-Path $fullPath)) {
+        Write-Error "Missing required open data image: $relPath (check assets/image and redeploy)"
+    }
+}
+
 $adapterSource = Join-Path $MainRoot "openDataContext\weapp-adapter.js"
 if (-not (Test-Path $adapterSource)) {
     $adapterSource = Join-Path $TargetDir "weapp-adapter.js"
