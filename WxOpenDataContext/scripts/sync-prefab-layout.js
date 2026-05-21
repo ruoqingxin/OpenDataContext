@@ -13,14 +13,26 @@ const imageDir = path.join(projectRoot, "assets/image");
 const MARK_START = "// @prefab-sync-start";
 const MARK_END = "// @prefab-sync-end";
 
-function findNode(node, name) {
-    if (!node) return null;
-    if (node.name === name) return node;
-    for (const child of node._$child || []) {
-        const found = findNode(child, name);
-        if (found) return found;
-    }
-    return null;
+/** 可选覆盖：仅在自动识别歧义时使用 */
+const SYNC_HINTS = {
+    listName: "list_items",
+    emptyText: "暂无可邀请的微信好友",
+    nickFallback: "玩家昵称",
+};
+
+const TYPE_IMAGE = new Set(["GImage", "GLoader", "Image"]);
+const TYPE_TEXT = new Set(["GTextField", "GLabel", "Text"]);
+
+function isTextNode(node) {
+    if (!node) return false;
+    if (TYPE_TEXT.has(node._$type)) return true;
+    return typeof node.text === "string" && node._$type !== "GList";
+}
+
+function isImageNode(node) {
+    if (!node) return false;
+    if (TYPE_IMAGE.has(node._$type)) return true;
+    return typeof node.src === "string" && !!node.src;
 }
 
 function num(v, fallback = 0) {
@@ -29,6 +41,10 @@ function num(v, fallback = 0) {
 
 function str(v, fallback = "") {
     return v == null ? fallback : String(v);
+}
+
+function jsonString(value) {
+    return JSON.stringify(String(value == null ? "" : value));
 }
 
 function buildUuidMap(dir) {
@@ -55,63 +71,408 @@ function replaceMarkedBlock(filePath, inner) {
     fs.writeFileSync(filePath, content.replace(re, block), "utf8");
 }
 
-const prefab = JSON.parse(fs.readFileSync(prefabPath, "utf8"));
-const uuidMap = buildUuidMap(imageDir);
-
-const list = findNode(prefab, "list_items");
-const item = findNode(prefab, "item");
-const imgBg = findNode(prefab, "img");
-const imgHead = findNode(prefab, "img_head");
-const txtNick = findNode(prefab, "txt_nick");
-const btnInvite = findNode(prefab, "btn_invite");
-const txtTitle = findNode(prefab, "txt_title");
-
-if (!list || !item) {
-    throw new Error("Prefab must contain list_items and item nodes.");
+function resolveImagePath(node, uuidMap) {
+    if (!node || !node.src) return "";
+    return uuidMap[str(node.src)] || "";
 }
 
+function isDescendant(entry, ancestorNode) {
+    let current = entry.parent;
+    while (current) {
+        if (current.node === ancestorNode) return true;
+        current = current.parent;
+    }
+    return false;
+}
+
+function createPrefabIndex(root) {
+    const all = [];
+    const byName = new Map();
+
+    function walk(node, parentEntry, pathParts) {
+        const entry = {
+            node,
+            parent: parentEntry,
+            path: pathParts.join("/"),
+            name: str(node.name, ""),
+            type: str(node._$type, ""),
+        };
+        all.push(entry);
+        if (entry.name) {
+            if (!byName.has(entry.name)) byName.set(entry.name, []);
+            byName.get(entry.name).push(entry);
+        }
+        for (const child of node._$child || []) {
+            walk(child, entry, [...pathParts, str(child.name, child._$id || "node")]);
+        }
+    }
+
+    walk(root, null, [str(root.name, "root")]);
+    return { root, all, byName };
+}
+
+function query(index, spec, scopeEntry) {
+    let result = index.all;
+
+    if (scopeEntry) {
+        result = result.filter((entry) => entry !== scopeEntry && isDescendant(entry, scopeEntry.node));
+    }
+
+    if (spec.rootChild) {
+        result = result.filter((entry) => entry.parent && entry.parent.node === index.root);
+    }
+
+    if (spec.type) {
+        const types = Array.isArray(spec.type)
+            ? spec.type
+            : spec.type instanceof Set
+              ? [...spec.type]
+              : [spec.type];
+        result = result.filter((entry) => types.includes(entry.type));
+    }
+
+    if (spec.name) {
+        result = result.filter((entry) => entry.name === spec.name);
+    }
+
+    if (spec.namePattern) {
+        result = result.filter((entry) => spec.namePattern.test(entry.name));
+    }
+
+    if (spec.pathEndsWith) {
+        result = result.filter((entry) => entry.path.endsWith(spec.pathEndsWith));
+    }
+
+    if (spec.pathIncludes) {
+        result = result.filter((entry) => entry.path.includes(spec.pathIncludes));
+    }
+
+    if (spec.directChildOf) {
+        result = result.filter(
+            (entry) => entry.parent && entry.parent.node === spec.directChildOf
+        );
+    }
+
+    if (spec.sortBy) {
+        result = result.slice().sort(spec.sortBy);
+    }
+
+    if (spec.first) {
+        return result[0] || null;
+    }
+
+    return result;
+}
+
+function pickOne(candidates, label) {
+    if (!candidates.length) return null;
+    if (candidates.length > 1) {
+        const paths = candidates.map((entry) => entry.path).join(", ");
+        console.warn(`[sync] ${label}: multiple matches, using first -> ${candidates[0].path}`);
+        console.warn(`[sync] ${label}: other matches -> ${paths}`);
+    }
+    return candidates[0];
+}
+
+function resolveList(index) {
+    const hinted = query(index, { type: "GList", name: SYNC_HINTS.listName, first: true });
+    if (hinted) return hinted;
+    return query(index, { type: "GList", first: true });
+}
+
+function resolveItemTemplate(index, listEntry) {
+    const listNode = listEntry.node;
+    const ref = listNode._templateNode && listNode._templateNode._$ref;
+    if (ref) {
+        const byRef = (listNode._$child || []).find((child) => child._$id === ref);
+        if (byRef) {
+            return {
+                node: byRef,
+                path: `${listEntry.path}/${str(byRef.name, byRef._$id)}`,
+                name: str(byRef.name, ""),
+                type: str(byRef._$type, ""),
+                parent: listEntry,
+            };
+        }
+    }
+    return (
+        pickOne(query(index, { name: "item", directChildOf: listNode }), "item template") ||
+        pickOne(query(index, { namePattern: /^item$/i }), "item template")
+    );
+}
+
+function resolveItemRole(index, itemEntry, role) {
+    const scope = itemEntry;
+    const itemNode = itemEntry.node;
+    const itemW = num(itemNode.width);
+
+    switch (role) {
+        case "background":
+            return (
+                pickOne(query(index, { name: "img", type: "GImage" }, scope), "item background") ||
+                pickOne(
+                    query(index, { type: "GImage" }, scope).filter(
+                        (entry) => num(entry.node.width) >= itemW * 0.9
+                    ),
+                    "item background"
+                )
+            );
+        case "avatar":
+            return (
+                pickOne(query(index, { namePattern: /head|avatar/i, type: ["GLoader", "GImage"] }, scope), "avatar") ||
+                pickOne(query(index, { type: ["GLoader", "GImage"] }, scope), "avatar")
+            );
+        case "nickname":
+            return (
+                pickOne(query(index, { namePattern: /nick/i, type: TYPE_TEXT }, scope), "nickname") ||
+                pickOne(query(index, { type: TYPE_TEXT, namePattern: /name/i }, scope), "nickname")
+            );
+        case "inviteBtn":
+            return (
+                pickOne(query(index, { namePattern: /btn_invite|invite/i, type: "GImage" }, scope), "invite button") ||
+                pickOne(query(index, { type: "GImage", namePattern: /btn/i }, scope), "invite button")
+            );
+        case "btnLabel": {
+            const btn = resolveItemRole(index, itemEntry, "inviteBtn");
+            if (!btn) return null;
+            return (
+                pickOne(query(index, { type: TYPE_TEXT, directChildOf: btn.node }, scope), "button label") ||
+                pickOne(
+                    query(index, { type: TYPE_TEXT, pathIncludes: `${btn.path}/` }, scope),
+                    "button label"
+                )
+            );
+        }
+        default:
+            return null;
+    }
+}
+
+function resolveStaticNodes(index, listEntry) {
+    return (index.root._$child || [])
+        .filter((child) => child !== listEntry.node)
+        .map((child) => {
+            const found = index.all.find((entry) => entry.node === child);
+            return found || null;
+        })
+        .filter(Boolean);
+}
+
+function textStyleFromNode(node, extra) {
+    const style = {
+        fontSize: num(node.fontSize, 32),
+        color: str(node.color, "#ffffff"),
+        verticalAlign: str(node.valign, "middle") === "top" ? "top" : "middle",
+    };
+    if (node.width != null) style.width = num(node.width);
+    if (node.height != null) style.height = num(node.height);
+    if (node.align === "center") style.textAlign = "center";
+    if (node.stroke != null) style.textStrokeWidth = num(node.stroke);
+    if (node.strokeColor) style.textStrokeColor = str(node.strokeColor);
+    if (node.strokeColor && style.textStrokeWidth == null) style.textStrokeWidth = 1;
+    return Object.assign(style, extra || {});
+}
+
+function absoluteStyleFromNode(node) {
+    return {
+        position: "absolute",
+        left: num(node.x),
+        top: num(node.y),
+        width: num(node.width),
+        height: num(node.height),
+    };
+}
+
+function classNameFromNode(node, fallback) {
+    const base = str(node.name, fallback).replace(/[^\w]+/g, "_");
+    return base || fallback;
+}
+
+function renderStyleObject(obj, indent) {
+    const pad = " ".repeat(indent);
+    const lines = ["{"];
+    for (const [key, value] of Object.entries(obj)) {
+        if (typeof value === "string") {
+            lines.push(`${pad}    ${key}: ${JSON.stringify(value)},`);
+        } else {
+            lines.push(`${pad}    ${key}: ${value},`);
+        }
+    }
+    lines.push(`${pad}}`);
+    return lines.join("\n");
+}
+
+function buildItemStyles(itemEntry, roles, uuidMap, rowGap) {
+    const itemNode = itemEntry.node;
+    const itemW = num(itemNode.width);
+    const itemH = num(itemNode.height);
+    const itemStep = itemH + rowGap;
+
+    const imgBg = roles.background && roles.background.node;
+    const imgHead = roles.avatar && roles.avatar.node;
+    const txtNick = roles.nickname && roles.nickname.node;
+    const btnInvite = roles.inviteBtn && roles.inviteBtn.node;
+    const txtBtnTitle = roles.btnLabel && roles.btnLabel.node;
+
+    const bgPath = resolveImagePath(imgBg, uuidMap);
+    const btnPath = resolveImagePath(btnInvite, uuidMap);
+
+    const headX = num(imgHead && imgHead.x);
+    const headSize = num(imgHead && imgHead.width, 100);
+    const nickX = num(txtNick && txtNick.x);
+    const nickW = num(txtNick && txtNick.width);
+    const nickH = num(txtNick && txtNick.height);
+    const btnCx = num(btnInvite && btnInvite.x);
+    const btnW = num(btnInvite && btnInvite.width);
+    const btnH = num(btnInvite && btnInvite.height);
+    const btnRight = itemW - btnCx - btnW * 0.5;
+    const nickMarginLeft = Math.max(0, nickX - headX - headSize);
+    const btnMarginLeft = Math.max(0, btnCx - btnW * 0.5 - nickX - nickW);
+    const itemBgY = num(imgBg && imgBg.y);
+    const itemBgH = num(imgBg && imgBg.height);
+    const itemPaddingTop = itemBgY + Math.max(0, (itemBgH - headSize) * 0.5);
+    const itemPaddingBottom = Math.max(0, itemH - itemPaddingTop - headSize + rowGap);
+
+    return {
+        bgPath,
+        btnPath,
+        headPath: resolveImagePath(imgHead, uuidMap),
+        inviteText: jsonString(str(txtBtnTitle && txtBtnTitle.text, "邀请")),
+        styles: {
+            item: {
+                width: itemW,
+                height: itemStep,
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundImage: bgPath,
+                backgroundImageType: "simple",
+                paddingLeft: headX,
+                paddingRight: Math.round(btnRight),
+                paddingTop: Math.round(itemPaddingTop),
+                paddingBottom: Math.round(itemPaddingBottom),
+            },
+            itemHead: {
+                width: headSize,
+                height: headSize,
+                borderRadius: 50,
+            },
+            itemNick: textStyleFromNode(txtNick || {}, {
+                width: nickW,
+                height: nickH,
+                marginLeft: nickMarginLeft,
+            }),
+            itemBtnWrap: {
+                width: btnW,
+                height: btnH,
+                marginLeft: btnMarginLeft,
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+            },
+            itemBtn: {
+                width: btnW,
+                height: btnH,
+            },
+            itemBtnText: Object.assign(
+                textStyleFromNode(txtBtnTitle || {}, {
+                    width: btnW,
+                    height: btnH,
+                    marginTop: -btnH,
+                    textAlign: "center",
+                    lineHeight: btnH,
+                })
+            ),
+        },
+    };
+}
+
+function buildStaticStyles(staticNodes, uuidMap) {
+    const styles = {};
+    const specs = [];
+    for (const entry of staticNodes) {
+        const node = entry.node;
+        const className = classNameFromNode(node, "staticNode");
+        if (isTextNode(node)) {
+            styles[className] = Object.assign(absoluteStyleFromNode(node), textStyleFromNode(node));
+            specs.push({
+                kind: "text",
+                className,
+                value: str(node.text, ""),
+            });
+        } else if (isImageNode(node)) {
+            styles[className] = absoluteStyleFromNode(node);
+            specs.push({
+                kind: "image",
+                className,
+                src: resolveImagePath(node, uuidMap),
+            });
+        } else {
+            console.warn(`[sync] static: skipped unsupported node ${entry.path} (${entry.type})`);
+        }
+    }
+    return { styles, specs };
+}
+
+const prefab = JSON.parse(fs.readFileSync(prefabPath, "utf8"));
+const uuidMap = buildUuidMap(imageDir);
+const index = createPrefabIndex(prefab);
+
+const listEntry = resolveList(index);
+if (!listEntry) {
+    throw new Error("Prefab must contain a GList node (e.g. list_items).");
+}
+
+const itemEntry = resolveItemTemplate(index, listEntry);
+if (!itemEntry) {
+    throw new Error("Prefab list must define an item template (_templateNode or child named item).");
+}
+
+const itemRoles = {
+    background: resolveItemRole(index, itemEntry, "background"),
+    avatar: resolveItemRole(index, itemEntry, "avatar"),
+    nickname: resolveItemRole(index, itemEntry, "nickname"),
+    inviteBtn: resolveItemRole(index, itemEntry, "inviteBtn"),
+    btnLabel: resolveItemRole(index, itemEntry, "btnLabel"),
+};
+
+if (!itemRoles.avatar || !itemRoles.nickname || !itemRoles.inviteBtn) {
+    throw new Error("Item template must include avatar, nickname text, and invite button nodes.");
+}
+
+const listNode = listEntry.node;
 const designW = num(prefab.width, 720);
 const designH = num(prefab.height, 1280);
-const listX = num(list.x);
-const listY = num(list.y);
-const listW = num(list.width);
-const listH = num(list.height);
-const rowGap = list.layout ? num(list.layout.rowGap) : 0;
-const itemW = num(item.width);
-const itemH = num(item.height);
-const itemStep = itemH + rowGap;
+const listX = num(listNode.x);
+const listY = num(listNode.y);
+const listW = num(listNode.width);
+const listH = num(listNode.height);
+const rowGap = listNode.layout ? num(listNode.layout.rowGap) : 0;
 
-const bgPath = uuidMap[str(imgBg.src)];
-const headPath = uuidMap[str(imgHead.src)];
-const btnPath = uuidMap[str(btnInvite.src)];
-if (!bgPath || !headPath || !btnPath) {
+const itemLayout = buildItemStyles(itemEntry, itemRoles, uuidMap, rowGap);
+if (!itemLayout.bgPath || !itemLayout.headPath || !itemLayout.btnPath) {
     throw new Error("Failed to resolve image paths from prefab src and assets/image/*.meta");
 }
 
-const headX = num(imgHead.x);
-const headSize = num(imgHead.width, 100);
-const nickX = num(txtNick.x);
-const nickW = num(txtNick.width);
-const nickH = num(txtNick.height);
-const nickY = num(txtNick.y);
-const btnCx = num(btnInvite.x);
-const btnW = num(btnInvite.width);
-const btnH = num(btnInvite.height);
-const btnRight = itemW - btnCx - btnW * 0.5;
-const nickMarginLeft = Math.max(0, nickX - headX - headSize);
-const btnMarginLeft = Math.max(0, btnCx - btnW * 0.5 - nickX - nickW);
-const itemBgY = num(imgBg.y);
-const itemBgH = num(imgBg.height);
-const itemPaddingTop = itemBgY + Math.max(0, (itemBgH - headSize) * 0.5);
-const itemPaddingBottom = Math.max(0, itemH - itemPaddingTop - headSize + rowGap);
+const staticNodes = resolveStaticNodes(index, listEntry);
+const staticLayout = buildStaticStyles(staticNodes, uuidMap);
 
-const styleBlock = [
+const styleLines = [
     "// layout from prefab/UISocialInviteView.lh",
+    "// nodes resolved by sync-prefab-layout.js",
+    `// list: ${listEntry.path}`,
+    `// item: ${itemEntry.path}`,
     "module.exports = {",
     "    container: {",
     `        width: ${designW},`,
     `        height: ${designH},`,
     '        flexDirection: "column",',
+];
+
+if (staticLayout.specs.length) {
+    styleLines.push('        position: "relative",');
+}
+
+styleLines.push(
     "    },",
     "    list: {",
     `        width: ${listW},`,
@@ -130,61 +491,20 @@ const styleBlock = [
     '        color: "#999999",',
     '        textAlign: "center",',
     `        lineHeight: ${listH},`,
-    "    },",
-    "    item: {",
-    `        width: ${itemW},`,
-    `        height: ${itemStep},`,
-    '        flexDirection: "row",',
-    '        alignItems: "center",',
-    `        backgroundImage: "${bgPath}",`,
-    '        backgroundImageType: "simple",',
-    `        paddingLeft: ${headX},`,
-    `        paddingRight: ${Math.round(btnRight)},`,
-    `        paddingTop: ${Math.round(itemPaddingTop)},`,
-    `        paddingBottom: ${Math.round(itemPaddingBottom)},`,
-    "    },",
-    "    itemHead: {",
-    `        width: ${headSize},`,
-    `        height: ${headSize},`,
-    "        borderRadius: 50,",
-    "    },",
-    "    itemNick: {",
-    `        width: ${nickW},`,
-    `        height: ${nickH},`,
-    `        marginLeft: ${nickMarginLeft},`,
-    `        fontSize: ${num(txtNick.fontSize, 32)},`,
-    `        color: "${str(txtNick.color, "#8a5839")}",`,
-    "        textStrokeWidth: 1,",
-    `        textStrokeColor: "${str(txtNick.strokeColor, "#373899")}",`,
-    '        verticalAlign: "middle",',
-    "    },",
-    "    itemBtnWrap: {",
-    `        width: ${btnW},`,
-    `        height: ${btnH},`,
-    `        marginLeft: ${btnMarginLeft},`,
-    '        flexDirection: "column",',
-    '        alignItems: "center",',
-    '        justifyContent: "center",',
-    "    },",
-    "    itemBtn: {",
-    `        width: ${btnW},`,
-    `        height: ${btnH},`,
-    "    },",
-    "    itemBtnText: {",
-    `        width: ${btnW},`,
-    `        height: ${btnH},`,
-    `        marginTop: -${btnH},`,
-    `        fontSize: ${num(txtTitle.fontSize, 32)},`,
-    `        color: "${str(txtTitle.color, "#f8fde4")}",`,
-    `        textStrokeWidth: ${num(txtTitle.stroke)},`,
-    `        textStrokeColor: "${str(txtTitle.strokeColor, "#4d7b26")}",`,
-    '        textAlign: "center",',
-    `        lineHeight: ${btnH},`,
-    "    },",
-    "};",
-].join("\n");
+    "    },"
+);
 
-const inviteText = JSON.stringify(str(txtTitle.text, "邀请"));
+for (const [key, value] of Object.entries(itemLayout.styles)) {
+    styleLines.push(`    ${key}: ${renderStyleObject(value, 4)},`);
+}
+
+for (const [key, value] of Object.entries(staticLayout.styles)) {
+    styleLines.push(`    ${key}: ${renderStyleObject(value, 4)},`);
+}
+
+styleLines.push("};");
+const styleBlockText = styleLines.join("\n");
+
 const tplfnBlock = [
     "// template from prefab/UISocialInviteView.lh",
     "function escapeAttr(value) {",
@@ -199,31 +519,54 @@ const tplfnBlock = [
     "    var data = it && it.data ? it.data : [];",
     '    var out = \'<view id="container">\';',
     "    if (!data.length) {",
-    '        out += \'<text id="emptyText" class="emptyText" value="暂无可邀请的微信好友"></text>\';',
+    `        out += '<text id="emptyText" class="emptyText" value="${SYNC_HINTS.emptyText.replace(/"/g, "&quot;")}"></text>';`,
     "    } else {",
     '        out += \'<scrollview id="list" class="list">\';',
     "        for (var i = 0; i < data.length; i++) {",
     "            var item = data[i];",
-    `            var avatar = item.avatarUrl ? item.avatarUrl : "${headPath}";`,
+    `            var avatar = item.avatarUrl ? item.avatarUrl : "${itemLayout.headPath}";`,
     '            out += \'<view class="item">\';',
     '            out += \'<image class="itemHead" src="\' + escapeAttr(avatar) + \'"></image>\';',
-    '            out += \'<text class="itemNick" value="\' + escapeAttr(item.nickName || "玩家昵称") + \'"></text>\';',
+    `            out += '<text class="itemNick" value="\' + escapeAttr(item.nickName || ${jsonString(SYNC_HINTS.nickFallback)}) + \'"></text>';`,
     '            out += \'<view class="itemBtnWrap">\';',
-    `            out += '<image id="btn_' + i + '" class="itemBtn" src="${btnPath}"></image>';`,
-    `            out += '<text class="itemBtnText" value=${inviteText}></text>';`,
+    `            out += '<image id="btn_' + i + '" class="itemBtn" src="${itemLayout.btnPath}"></image>';`,
+    `            out += '<text class="itemBtnText" value=${itemLayout.inviteText}></text>';`,
     '            out += "</view></view>";',
     "        }",
     '        out += "</scrollview>";',
     "    }",
+];
+
+for (const spec of staticLayout.specs) {
+    if (spec.kind === "text") {
+        tplfnBlock.push(
+            `    out += '<text class="${spec.className}" value=${jsonString(spec.value)}></text>';`
+        );
+    } else if (spec.kind === "image" && spec.src) {
+        tplfnBlock.push(
+            `    out += '<image class="${spec.className}" src="${spec.src}"></image>';`
+        );
+    }
+}
+
+tplfnBlock.push(
     '    out += "</view>";',
     "    return out;",
     "}",
     "",
-    "module.exports = tplFunc;",
-].join("\n");
+    "module.exports = tplFunc;"
+);
 
-replaceMarkedBlock(styleJsPath, styleBlock);
-replaceMarkedBlock(tplfnJsPath, tplfnBlock);
+replaceMarkedBlock(styleJsPath, styleBlockText);
+replaceMarkedBlock(tplfnJsPath, tplfnBlock.join("\n"));
 
 console.log("Synced prefab -> render/style.js, render/tplfn.js");
+console.log(`  list: ${listEntry.path}`);
+console.log(`  item: ${itemEntry.path}`);
+for (const [role, entry] of Object.entries(itemRoles)) {
+    if (entry) console.log(`  ${role}: ${entry.path}`);
+}
+for (const entry of staticNodes) {
+    console.log(`  static: ${entry.path} (${entry.type})`);
+}
 console.log("Next: .\\scripts\\deploy-to-main.ps1");
