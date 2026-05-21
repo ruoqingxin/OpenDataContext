@@ -1,7 +1,7 @@
 {
     "modules": {
         "laya.ui": true,
-        "laya.d3": true
+        "laya.d3": false
     },
     "addons": {
         "laya.ui": "ui2"

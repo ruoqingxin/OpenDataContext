@@ -1,6 +1,6 @@
 import UISocialInviteView from "../module/UISocialInviteView";
 import { OpenDataCommand } from "./OpenDataCommand";
-import { InviteUser, OpenDataBridge, OpenDataMessage } from "./types";
+import { InviteUser, OpenDataMessage } from "./types";
 
 interface WxFriendCloudStorageItem {
     openid?: string;
@@ -52,7 +52,7 @@ export default class InviteOpenDataModule {
         shareImageUrlId: "",
     };
 
-    constructor(private _stage: Laya.Stage, private _bridge: OpenDataBridge) { }
+    constructor(private _stage: Laya.Stage) { }
 
     public handleMessage(message: OpenDataMessage): void {
         switch (message?.type) {
@@ -106,10 +106,7 @@ export default class InviteOpenDataModule {
 
     private showInviteView(): void {
         if (!this._inviteView) {
-            this._inviteView = new UISocialInviteView(
-                this.handleInviteUser.bind(this),
-                this.handleViewClose.bind(this)
-            );
+            this._inviteView = new UISocialInviteView(this.handleInviteUser.bind(this));
         }
 
         this._inviteView.size(this._stage.width, this._stage.height);
@@ -138,10 +135,6 @@ export default class InviteOpenDataModule {
 
     private handleInviteUser(openid: string): void {
         this.shareToWxFriend(openid);
-    }
-
-    private handleViewClose(): void {
-        this.hideInviteView();
     }
 
     private refreshInviteView(): void {

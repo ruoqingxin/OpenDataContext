@@ -4,5 +4,3 @@ export const OpenDataCommand = {
     UpdateViewPort: "updateViewPort",
     Close: "close",
 } as const;
-
-export type OpenDataCommandType = typeof OpenDataCommand[keyof typeof OpenDataCommand];

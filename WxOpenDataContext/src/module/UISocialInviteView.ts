@@ -14,10 +14,7 @@ export default class UISocialInviteView extends Laya.Sprite {
     private _list: any = null;
     private _loaded = false;
 
-    constructor(
-        private _onInviteUser: (openid: string) => void,
-        private _onClose: () => void
-    ) {
+    constructor(private _onInviteUser: (openid: string) => void) {
         super();
         this.size(Laya.stage.width, Laya.stage.height);
         this.loadView();
@@ -56,7 +53,6 @@ export default class UISocialInviteView extends Laya.Sprite {
         this._root = root;
         this.addChild(root);
         this._list = this.findNodeByName(this._root, "list_items");
-        this.bindCloseButton();
         this._loaded = true;
         this.layoutChildren();
         this.refresh();
@@ -167,17 +163,6 @@ export default class UISocialInviteView extends Laya.Sprite {
         const openid = btnInvite?.__inviteOpenid;
         if (openid) {
             this._onInviteUser(String(openid));
-        }
-    }
-
-    private bindCloseButton(): void {
-        const btnClose = this.findNodeByName(this._root, "btn_close");
-        if (!btnClose || btnClose.__closeBound) {
-            return;
-        }
-        btnClose.__closeBound = true;
-        if (typeof btnClose.on === "function") {
-            btnClose.on(Laya.Event.CLICK, this, this._onClose);
         }
     }
 

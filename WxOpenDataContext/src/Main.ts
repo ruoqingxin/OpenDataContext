@@ -9,14 +9,14 @@ export default class Main extends Laya.Script {
     private _openDataApp: OpenDataApp | null = null;
 
     onAwake(): void {
-        this.preloadOpenDataAssets().then(() => {
-            this._openDataApp = new OpenDataApp(Laya.stage, new WxOpenDataBridge());
-            this._openDataApp.start();
-        }).catch((err) => {
-            console.error("[OpenData] 资源预加载失败:", err);
-            this._openDataApp = new OpenDataApp(Laya.stage, new WxOpenDataBridge());
-            this._openDataApp.start();
-        });
+        this.preloadOpenDataAssets()
+            .catch((err) => console.error("[OpenData] 资源预加载失败:", err))
+            .then(() => this.startOpenDataApp());
+    }
+
+    private startOpenDataApp(): void {
+        this._openDataApp = new OpenDataApp(Laya.stage, new WxOpenDataBridge());
+        this._openDataApp.start();
     }
 
     private preloadOpenDataAssets(): Promise<void> {

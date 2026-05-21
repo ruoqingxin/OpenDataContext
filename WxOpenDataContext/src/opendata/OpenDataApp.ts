@@ -6,7 +6,7 @@ export default class OpenDataApp {
     private _started: boolean = false;
 
     constructor(private _stage: Laya.Stage, private _bridge: OpenDataBridge) {
-        this._inviteModule = new InviteOpenDataModule(this._stage, this._bridge);
+        this._inviteModule = new InviteOpenDataModule(this._stage);
     }
 
     public start(): void {

@@ -42,6 +42,7 @@
 ```
 src/
   Main.ts                    # 入口，预加载 UI 资源并启动 OpenDataApp
+  Main.generated.ts          # IDE 自动生成，勿手动修改
   module/UISocialInviteView.ts   # 预制体驱动的邀请列表 UI
   opendata/
     OpenDataApp.ts             # 开放域应用入口
@@ -49,7 +50,10 @@ src/
     WxOpenDataBridge.ts        # wx.onMessage 桥接
     OpenDataAssets.ts          # UI 资源 UUID（构建时打入包内）
     OpenDataCommand.ts         # 与主域约定的消息类型
+    types.ts                   # 共享类型定义
 ```
+
+> 仅维护 `.ts` 源码；`src/` 下的 `.js` 为 IDE 编译产物，已加入 `.gitignore`。
 
 ## 注意事项
 
