@@ -69,10 +69,7 @@ export default class InviteOpenDataModule {
 
     private showView(): void {
         if (!this._inviteView) {
-            this._inviteView = new UISocialInviteView(
-                (openid) => this.shareToFriend(openid),
-                () => this.hideView()
-            );
+            this._inviteView = new UISocialInviteView((openid) => this.shareToFriend(openid));
         }
         this._inviteView.size(this._stage.width, this._stage.height);
         this._inviteView.setUsers(this._users);

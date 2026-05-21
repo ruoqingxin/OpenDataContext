@@ -1,6 +1,8 @@
 {
   "name": "WxOpenDataContext",
-  "useCompressedEngine": false,
+  "alwaysIncluded": [
+    "image"
+  ],
   "android": {
     "targetArchitectures": {
       "ARMv7": false,

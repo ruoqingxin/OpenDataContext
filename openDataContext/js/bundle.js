@@ -2,6 +2,14 @@
   var __defProp = Object.defineProperty;
   var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
+  // src/opendata/OpenDataAssets.ts
+  var OPEN_DATA_IMAGES = {
+    itemBg: "image/ui_frame_qswj_d.png",
+    inviteBtn: "image/ui_btn_ty_g2.png",
+    defaultAvatar: "image/icon_800000.png"
+  };
+  var OPEN_DATA_ASSETS = Object.values(OPEN_DATA_IMAGES);
+
   // src/opendata/types.ts
   var OpenDataCommand = {
     ShowInviteFriend: "od:showInviteFriend",
@@ -11,17 +19,34 @@
   };
 
   // src/opendata/UISocialInviteView.ts
-  var ITEM_HEIGHT = 88;
-  var LIST_TOP = 52;
+  var DESIGN_W = 720;
+  var DESIGN_H = 1280;
+  var LIST = { x: 16, y: 91, width: 696, height: 1047, bottom: 142 };
+  var ITEM = { width: 688, height: 200, rowGap: -15 };
+  var ITEM_STEP = ITEM.height + ITEM.rowGap;
+  var ITEM_BG = { y: 28, width: 688, height: 172 };
+  var ITEM_HEAD = { x: 38, y: 64, size: 100 };
+  var ITEM_NICK = { x: 162, y: 95, width: 270, height: 37, fontSize: 32, color: "#8a5839", strokeColor: "#373899" };
+  var ITEM_BTN = { cx: 582, cy: 114, width: 161, height: 64 };
+  var ITEM_BTN_TEXT = { fontSize: 32, color: "#f8fde4", stroke: 4, strokeColor: "#4d7b26" };
   var _UISocialInviteView = class _UISocialInviteView extends Laya.Sprite {
-    constructor(_onInvite, _onClose) {
+    constructor(_onInvite) {
       super();
       this._onInvite = _onInvite;
-      this._onClose = _onClose;
       this._listPanel = new Laya.Panel();
       this._emptyLabel = new Laya.Label();
-      this._btnClose = new Laya.Button();
-      this.buildUI();
+      this._scaleX = 1;
+      this._scaleY = 1;
+      this._itemWidth = ITEM.width;
+      this._listPanel.vScrollBarSkin = "";
+      this.addChild(this._listPanel);
+      this._emptyLabel.text = "暂无可邀请的微信好友";
+      this._emptyLabel.fontSize = 24;
+      this._emptyLabel.color = "#999999";
+      this._emptyLabel.align = "center";
+      this._emptyLabel.valign = "middle";
+      this._emptyLabel.visible = false;
+      this.addChild(this._emptyLabel);
     }
     setUsers(users) {
       this.visible = true;
@@ -38,56 +63,70 @@
     layout() {
       const w = this.width;
       const h = this.height;
-      this._btnClose.x = w - this._btnClose.width - 12;
-      this._btnClose.y = 8;
-      this._listPanel.pos(0, LIST_TOP);
-      this._listPanel.size(w, Math.max(0, h - LIST_TOP));
-      this._emptyLabel.pos(0, LIST_TOP);
-      this._emptyLabel.size(w, Math.max(0, h - LIST_TOP));
-    }
-    buildUI() {
-      this._listPanel.vScrollBarSkin = "";
-      this.addChild(this._listPanel);
-      this._emptyLabel.text = "暂无可邀请的微信好友";
-      this._emptyLabel.fontSize = 24;
-      this._emptyLabel.color = "#999999";
-      this._emptyLabel.align = "center";
-      this._emptyLabel.valign = "middle";
-      this._emptyLabel.visible = false;
-      this.addChild(this._emptyLabel);
-      this._btnClose.label = "关闭";
-      this._btnClose.size(80, 40);
-      this._btnClose.on(Laya.Event.CLICK, this, this._onClose);
-      this.addChild(this._btnClose);
+      this._scaleX = w / DESIGN_W;
+      this._scaleY = h / DESIGN_H;
+      this._itemWidth = ITEM.width * this._scaleX;
+      const listX = LIST.x * this._scaleX;
+      const listY = LIST.y * this._scaleY;
+      const listW = w - listX * 2;
+      const listH = h - listY - LIST.bottom * this._scaleY;
+      this._listPanel.pos(listX, listY);
+      this._listPanel.size(listW, listH);
+      this._emptyLabel.pos(listX, listY);
+      this._emptyLabel.size(listW, listH);
     }
     createItem(user, index) {
+      const sx = this._scaleX;
+      const sy = this._scaleY;
+      const itemH = ITEM.height * sy;
+      const itemW = this._itemWidth;
       const item = new Laya.Box();
-      item.size(this.width, ITEM_HEIGHT);
-      item.y = index * ITEM_HEIGHT;
-      const bg = new Laya.Sprite();
-      bg.graphics.drawRect(0, 0, item.width, item.height, "#ffffff");
+      item.size(itemW, itemH);
+      item.y = index * ITEM_STEP * sy;
+      const bg = new Laya.Image();
+      bg.skin = OPEN_DATA_IMAGES.itemBg;
+      bg.pos(0, ITEM_BG.y * sy);
+      bg.size(ITEM_BG.width * sx, ITEM_BG.height * sy);
       item.addChild(bg);
       const imgHead = new Laya.Image();
-      imgHead.size(64, 64);
-      imgHead.pos(16, 12);
-      if (user.avatarUrl) {
-        imgHead.skin = user.avatarUrl;
-      }
+      imgHead.pos(ITEM_HEAD.x * sx, ITEM_HEAD.y * sy);
+      imgHead.size(ITEM_HEAD.size * sx, ITEM_HEAD.size * sy);
+      imgHead.skin = user.avatarUrl || OPEN_DATA_IMAGES.defaultAvatar;
       item.addChild(imgHead);
       const txtNick = new Laya.Label();
-      txtNick.text = user.nickName;
-      txtNick.fontSize = 26;
-      txtNick.color = "#333333";
-      txtNick.pos(92, 28);
-      txtNick.size(Math.max(0, item.width - 220), 32);
+      txtNick.text = user.nickName || "玩家昵称";
+      txtNick.fontSize = ITEM_NICK.fontSize * sy;
+      txtNick.color = ITEM_NICK.color;
+      txtNick.strokeColor = ITEM_NICK.strokeColor;
+      txtNick.stroke = 1;
+      txtNick.valign = "middle";
+      txtNick.pos(ITEM_NICK.x * sx, ITEM_NICK.y * sy);
+      txtNick.size(ITEM_NICK.width * sx, ITEM_NICK.height * sy);
       txtNick.overflow = "hidden";
       item.addChild(txtNick);
-      const btnInvite = new Laya.Button();
-      btnInvite.label = "邀请";
-      btnInvite.size(96, 48);
-      btnInvite.pos(item.width - 112, 20);
+      const btnW = ITEM_BTN.width * sx;
+      const btnH = ITEM_BTN.height * sy;
+      const btnX = ITEM_BTN.cx * sx - btnW * 0.5;
+      const btnY = ITEM_BTN.cy * sy - btnH * 0.5;
+      const btnInvite = new Laya.Image();
+      btnInvite.skin = OPEN_DATA_IMAGES.inviteBtn;
+      btnInvite.pos(btnX, btnY);
+      btnInvite.size(btnW, btnH);
+      btnInvite.mouseEnabled = true;
       btnInvite.on(Laya.Event.CLICK, this, () => this._onInvite(user.openid));
       item.addChild(btnInvite);
+      const txtTitle = new Laya.Label();
+      txtTitle.text = "邀请";
+      txtTitle.fontSize = ITEM_BTN_TEXT.fontSize * sy;
+      txtTitle.color = ITEM_BTN_TEXT.color;
+      txtTitle.stroke = ITEM_BTN_TEXT.stroke;
+      txtTitle.strokeColor = ITEM_BTN_TEXT.strokeColor;
+      txtTitle.align = "center";
+      txtTitle.valign = "middle";
+      txtTitle.size(btnW, btnH);
+      txtTitle.pos(btnX, btnY);
+      txtTitle.mouseEnabled = false;
+      item.addChild(txtTitle);
       return item;
     }
   };
@@ -129,9 +168,7 @@
           break;
         case OpenDataCommand.UpdateViewPort: {
           const box = message.box;
-          if (!box) {
-            break;
-          }
+          if (!box) break;
           const width = Math.max(1, Math.floor(Number(box.width) || 0));
           const height = Math.max(1, Math.floor(Number(box.height) || 0));
           this._stage.size(width, height);
@@ -146,24 +183,17 @@
       }
     }
     onStageResize() {
-      if (!this._inviteView) {
-        return;
-      }
+      if (!this._inviteView) return;
       this._inviteView.size(this._stage.width, this._stage.height);
       this._inviteView.layout();
     }
     showView() {
       if (!this._inviteView) {
-        this._inviteView = new UISocialInviteView(
-          (openid) => this.shareToFriend(openid),
-          () => this.hideView()
-        );
+        this._inviteView = new UISocialInviteView((openid) => this.shareToFriend(openid));
       }
       this._inviteView.size(this._stage.width, this._stage.height);
       this._inviteView.setUsers(this._users);
-      if (!this._inviteView.parent) {
-        this._stage.addChild(this._inviteView);
-      }
+      if (!this._inviteView.parent) this._stage.addChild(this._inviteView);
       this._inviteView.visible = true;
     }
     hideView() {
@@ -177,9 +207,7 @@
       }
     }
     loadFriends() {
-      if (this._loadingFriends || this._loadedFriends || typeof wx === "undefined" || !wx.getFriendCloudStorage) {
-        return;
-      }
+      if (this._loadingFriends || this._loadedFriends || typeof wx === "undefined" || !wx.getFriendCloudStorage) return;
       this._loadingFriends = true;
       wx.getFriendCloudStorage({
         keyList: ["invite_tag"],
@@ -188,9 +216,7 @@
           this._loadedFriends = true;
           this.refreshView();
         },
-        complete: () => {
-          this._loadingFriends = false;
-        }
+        complete: () => { this._loadingFriends = false; }
       });
     }
     mapFriends(list) {
@@ -198,9 +224,7 @@
       const seen = /* @__PURE__ */ new Set();
       for (const item of list) {
         const openid = typeof (item == null ? void 0 : item.openid) === "string" ? item.openid.trim() : "";
-        if (!openid || seen.has(openid)) {
-          continue;
-        }
+        if (!openid || seen.has(openid)) continue;
         seen.add(openid);
         const name = (item == null ? void 0 : item.nickName) || (item == null ? void 0 : item.nickname);
         result.push({
@@ -212,15 +236,9 @@
       return result;
     }
     shareToFriend(openid) {
-      if (typeof wx === "undefined") {
-        return;
-      }
+      if (typeof wx === "undefined") return;
       const query = "room_id=" + encodeURIComponent(String(this._shareConfig.roomId)) + "&room_name=" + encodeURIComponent(this._shareConfig.roomName) + "&invite_openid=" + encodeURIComponent(openid);
-      const payload = {
-        title: this._shareConfig.shareTxt,
-        imageUrl: this._shareConfig.shareImageUrl,
-        query
-      };
+      const payload = { title: this._shareConfig.shareTxt, imageUrl: this._shareConfig.shareImageUrl, query };
       const wxApi = wx;
       if (wxApi.shareMessageToFriend) {
         wxApi.shareMessageToFriend(Object.assign({ openId: openid }, payload));
@@ -234,22 +252,30 @@
 
   // src/Main.ts
   var DESIGN_WIDTH = 720;
-  var DESIGN_HEIGHT = 480;
+  var DESIGN_HEIGHT = 1280;
+  function preloadAssets() {
+    const tasks = OPEN_DATA_ASSETS.map((url) => {
+      const task = Laya.loader.load(url);
+      if (task && typeof task.then === "function") return task;
+      return new Promise((resolve) => {
+        Laya.loader.load(url, Laya.Handler.create(null, () => resolve()));
+      });
+    });
+    return Promise.all(tasks).then(() => void 0);
+  }
   Laya.init(DESIGN_WIDTH, DESIGN_HEIGHT);
   Laya.stage.scaleMode = Laya.Stage.SCALE_SHOWALL;
   Laya.stage.alignV = Laya.Stage.ALIGN_MIDDLE;
   Laya.stage.alignH = Laya.Stage.ALIGN_CENTER;
   const inviteModule = new InviteOpenDataModule(Laya.stage);
-  if (typeof wx !== "undefined" && wx.onMessage) {
-    const engineHandler = Laya.MiniAdpter && Laya.MiniAdpter._onMessage;
-    wx.onMessage((data) => {
-      if (typeof engineHandler === "function") {
-        engineHandler(data);
-      }
-      inviteModule.handleMessage(
-        data && typeof data.type === "string" ? data : { type: "" }
-      );
-    });
-  }
-  Laya.stage.on(Laya.Event.RESIZE, inviteModule, inviteModule.onStageResize);
+  preloadAssets().catch((err) => console.error("[OpenData] 资源预加载失败:", err)).then(() => {
+    if (typeof wx !== "undefined" && wx.onMessage) {
+      const engineHandler = Laya.MiniAdpter && Laya.MiniAdpter._onMessage;
+      wx.onMessage((data) => {
+        if (typeof engineHandler === "function") engineHandler(data);
+        inviteModule.handleMessage(data && typeof data.type === "string" ? data : { type: "" });
+      });
+    }
+    Laya.stage.on(Laya.Event.RESIZE, inviteModule, inviteModule.onStageResize);
+  });
 })();
