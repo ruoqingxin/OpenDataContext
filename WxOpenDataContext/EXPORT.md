@@ -18,7 +18,28 @@
 .\WxOpenDataContext\scripts\deploy-to-main.ps1
 ```
 
-脚本会将 `release/wxgame`（或 `release/weixinminigame`）下的内容复制到主工程 `openDataContext/` 目录。
+脚本会将 `release/wxgame`（或 `release/weixinminigame`）下的内容复制到主工程 `openDataContext/` 目录，并自动生成开放域入口 `index.js`。
+
+### 开放域入口说明
+
+Laya IDE 构建产物默认入口是 `game.js`（完整主域启动链），**微信开放域子域**实际加载的是根目录 `index.js`，需手动/脚本生成：
+
+```javascript
+require("weapp-adapter.js");
+window.loadLib = require;
+loadLib("libs/laya.core.js");
+// ... 引擎 libs ...
+Laya.isWXOpenDataContext = true;
+Laya.isWXPosMsg = true;
+loadLib("js/bundle.js");   // 业务代码
+loadLib("js/index.js");    // Laya.init + 打开 Scene.ls
+```
+
+模板文件：`scripts/openDataContext-index.js`。仅构建、不部署时可执行：
+
+```powershell
+.\WxOpenDataContext\scripts\patch-release-entry.ps1
+```
 
 ## 主工程要求
 
