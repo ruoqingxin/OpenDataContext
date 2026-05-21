@@ -6,8 +6,8 @@ const path = require("path");
 
 const projectRoot = path.resolve(__dirname, "..");
 const prefabPath = path.join(projectRoot, "assets/prefab/UISocialInviteView.lh");
-const viewTsPath = path.join(projectRoot, "src/opendata/UISocialInviteView.ts");
-const assetsTsPath = path.join(projectRoot, "src/opendata/OpenDataAssets.ts");
+const styleJsPath = path.join(projectRoot, "scripts/openDataContext/render/style.js");
+const tplfnJsPath = path.join(projectRoot, "scripts/openDataContext/render/tplfn.js");
 const imageDir = path.join(projectRoot, "assets/image");
 
 const MARK_START = "// @prefab-sync-start";
@@ -29,10 +29,6 @@ function num(v, fallback = 0) {
 
 function str(v, fallback = "") {
     return v == null ? fallback : String(v);
-}
-
-function color(v) {
-    return v ? `"${v}"` : '""';
 }
 
 function buildUuidMap(dir) {
@@ -80,10 +76,10 @@ const listX = num(list.x);
 const listY = num(list.y);
 const listW = num(list.width);
 const listH = num(list.height);
-const listBottom = designH - listY - listH;
 const rowGap = list.layout ? num(list.layout.rowGap) : 0;
 const itemW = num(item.width);
 const itemH = num(item.height);
+const itemStep = itemH + rowGap;
 
 const bgPath = uuidMap[str(imgBg.src)];
 const headPath = uuidMap[str(imgHead.src)];
@@ -92,38 +88,142 @@ if (!bgPath || !headPath || !btnPath) {
     throw new Error("Failed to resolve image paths from prefab src and assets/image/*.meta");
 }
 
-const layoutBlock = [
+const headX = num(imgHead.x);
+const headSize = num(imgHead.width, 100);
+const nickX = num(txtNick.x);
+const nickW = num(txtNick.width);
+const nickH = num(txtNick.height);
+const nickY = num(txtNick.y);
+const btnCx = num(btnInvite.x);
+const btnW = num(btnInvite.width);
+const btnH = num(btnInvite.height);
+const btnRight = itemW - btnCx - btnW * 0.5;
+const nickMarginLeft = Math.max(0, nickX - headX - headSize);
+const btnMarginLeft = Math.max(0, btnCx - btnW * 0.5 - nickX - nickW);
+const itemBgY = num(imgBg.y);
+const itemBgH = num(imgBg.height);
+const itemPaddingTop = itemBgY + Math.max(0, (itemBgH - headSize) * 0.5);
+const itemPaddingBottom = Math.max(0, itemH - itemPaddingTop - headSize + rowGap);
+
+const styleBlock = [
     "// layout from prefab/UISocialInviteView.lh",
-    `const DESIGN_W = ${designW};`,
-    `const DESIGN_H = ${designH};`,
-    "",
-    "// list_items",
-    `const LIST = { x: ${listX}, y: ${listY}, width: ${listW}, height: ${listH}, bottom: ${listBottom} };`,
-    "// item template",
-    `const ITEM = { width: ${itemW}, height: ${itemH}, rowGap: ${rowGap} };`,
-    "const ITEM_STEP = ITEM.height + ITEM.rowGap;",
-    "",
-    "// item children",
-    `const ITEM_BG = { y: ${num(imgBg.y)}, width: ${num(imgBg.width, itemW)}, height: ${num(imgBg.height)} };`,
-    `const ITEM_HEAD = { x: ${num(imgHead.x)}, y: ${num(imgHead.y)}, size: ${num(imgHead.width, 100)} };`,
-    `const ITEM_NICK = { x: ${num(txtNick.x)}, y: ${num(txtNick.y)}, width: ${num(txtNick.width)}, height: ${num(txtNick.height)}, fontSize: ${num(txtNick.fontSize, 32)}, color: ${color(txtNick.color || "#8a5839")}, strokeColor: ${color(txtNick.strokeColor || "#373899")} };`,
-    `const ITEM_BTN = { cx: ${num(btnInvite.x)}, cy: ${num(btnInvite.y)}, width: ${num(btnInvite.width)}, height: ${num(btnInvite.height)} };`,
-    `const ITEM_BTN_TEXT = { text: ${JSON.stringify(str(txtTitle.text, "邀请"))}, fontSize: ${num(txtTitle.fontSize, 32)}, color: ${color(txtTitle.color || "#f8fde4")}, stroke: ${num(txtTitle.stroke)}, strokeColor: ${color(txtTitle.strokeColor || "#4d7b26")} };`,
+    "module.exports = {",
+    "    container: {",
+    `        width: ${designW},`,
+    `        height: ${designH},`,
+    '        flexDirection: "column",',
+    "    },",
+    "    list: {",
+    `        width: ${listW},`,
+    `        height: ${listH},`,
+    `        marginLeft: ${listX},`,
+    `        marginTop: ${listY},`,
+    "        scrollY: true,",
+    '        flexDirection: "column",',
+    "    },",
+    "    emptyText: {",
+    `        width: ${listW},`,
+    `        height: ${listH},`,
+    `        marginLeft: ${listX},`,
+    `        marginTop: ${listY},`,
+    "        fontSize: 24,",
+    '        color: "#999999",',
+    '        textAlign: "center",',
+    `        lineHeight: ${listH},`,
+    "    },",
+    "    item: {",
+    `        width: ${itemW},`,
+    `        height: ${itemStep},`,
+    '        flexDirection: "row",',
+    '        alignItems: "center",',
+    `        backgroundImage: "${bgPath}",`,
+    '        backgroundImageType: "simple",',
+    `        paddingLeft: ${headX},`,
+    `        paddingRight: ${Math.round(btnRight)},`,
+    `        paddingTop: ${Math.round(itemPaddingTop)},`,
+    `        paddingBottom: ${Math.round(itemPaddingBottom)},`,
+    "    },",
+    "    itemHead: {",
+    `        width: ${headSize},`,
+    `        height: ${headSize},`,
+    "        borderRadius: 50,",
+    "    },",
+    "    itemNick: {",
+    `        width: ${nickW},`,
+    `        height: ${nickH},`,
+    `        marginLeft: ${nickMarginLeft},`,
+    `        fontSize: ${num(txtNick.fontSize, 32)},`,
+    `        color: "${str(txtNick.color, "#8a5839")}",`,
+    "        textStrokeWidth: 1,",
+    `        textStrokeColor: "${str(txtNick.strokeColor, "#373899")}",`,
+    '        verticalAlign: "middle",',
+    "    },",
+    "    itemBtnWrap: {",
+    `        width: ${btnW},`,
+    `        height: ${btnH},`,
+    `        marginLeft: ${btnMarginLeft},`,
+    '        flexDirection: "column",',
+    '        alignItems: "center",',
+    '        justifyContent: "center",',
+    "    },",
+    "    itemBtn: {",
+    `        width: ${btnW},`,
+    `        height: ${btnH},`,
+    "    },",
+    "    itemBtnText: {",
+    `        width: ${btnW},`,
+    `        height: ${btnH},`,
+    `        marginTop: -${btnH},`,
+    `        fontSize: ${num(txtTitle.fontSize, 32)},`,
+    `        color: "${str(txtTitle.color, "#f8fde4")}",`,
+    `        textStrokeWidth: ${num(txtTitle.stroke)},`,
+    `        textStrokeColor: "${str(txtTitle.strokeColor, "#4d7b26")}",`,
+    '        textAlign: "center",',
+    `        lineHeight: ${btnH},`,
+    "    },",
+    "};",
 ].join("\n");
 
-const assetsBlock = [
-    "// image paths from prefab/UISocialInviteView.lh",
-    "export const OPEN_DATA_IMAGES = {",
-    `    itemBg: "${bgPath}",`,
-    `    inviteBtn: "${btnPath}",`,
-    `    defaultAvatar: "${headPath}",`,
-    "} as const;",
+const inviteText = JSON.stringify(str(txtTitle.text, "邀请"));
+const tplfnBlock = [
+    "// template from prefab/UISocialInviteView.lh",
+    "function escapeAttr(value) {",
+    '    return String(value == null ? "" : value)',
+    '        .replace(/&/g, "&amp;")',
+    '        .replace(/"/g, "&quot;")',
+    '        .replace(/</g, "&lt;")',
+    '        .replace(/>/g, "&gt;");',
+    "}",
     "",
-    "export const OPEN_DATA_ASSETS = Object.values(OPEN_DATA_IMAGES);",
+    "function tplFunc(it) {",
+    "    var data = it && it.data ? it.data : [];",
+    '    var out = \'<view id="container">\';',
+    "    if (!data.length) {",
+    '        out += \'<text id="emptyText" class="emptyText" value="暂无可邀请的微信好友"></text>\';',
+    "    } else {",
+    '        out += \'<scrollview id="list" class="list">\';',
+    "        for (var i = 0; i < data.length; i++) {",
+    "            var item = data[i];",
+    `            var avatar = item.avatarUrl ? item.avatarUrl : "${headPath}";`,
+    '            out += \'<view class="item">\';',
+    '            out += \'<image class="itemHead" src="\' + escapeAttr(avatar) + \'"></image>\';',
+    '            out += \'<text class="itemNick" value="\' + escapeAttr(item.nickName || "玩家昵称") + \'"></text>\';',
+    '            out += \'<view class="itemBtnWrap">\';',
+    `            out += '<image id="btn_' + i + '" class="itemBtn" src="${btnPath}"></image>';`,
+    `            out += '<text class="itemBtnText" value=${inviteText}></text>';`,
+    '            out += "</view></view>";',
+    "        }",
+    '        out += "</scrollview>";',
+    "    }",
+    '    out += "</view>";',
+    "    return out;",
+    "}",
+    "",
+    "module.exports = tplFunc;",
 ].join("\n");
 
-replaceMarkedBlock(viewTsPath, layoutBlock);
-replaceMarkedBlock(assetsTsPath, assetsBlock);
+replaceMarkedBlock(styleJsPath, styleBlock);
+replaceMarkedBlock(tplfnJsPath, tplfnBlock);
 
-console.log("Synced prefab -> UISocialInviteView.ts, OpenDataAssets.ts");
-console.log("Next: rebuild in Laya IDE, then deploy-to-main.ps1");
+console.log("Synced prefab -> render/style.js, render/tplfn.js");
+console.log("Next: .\\scripts\\deploy-to-main.ps1");
