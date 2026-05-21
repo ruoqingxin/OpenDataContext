@@ -1,50 +1,19 @@
-import UISocialInviteView from "../module/UISocialInviteView";
-import { OpenDataCommand } from "./OpenDataCommand";
-import { InviteUser, OpenDataMessage } from "./types";
+import UISocialInviteView from "./UISocialInviteView";
+import { InviteUser, OpenDataCommand, OpenDataMessage } from "./types";
 
-interface WxFriendCloudStorageItem {
+interface WxFriendItem {
     openid?: string;
     avatarUrl?: string;
     nickname?: string;
     nickName?: string;
 }
 
-interface WxFriendCloudStorageResponse {
-    data?: WxFriendCloudStorageItem[];
-}
-
-interface InviteShowMessage extends OpenDataMessage {
-    room_id: number;
-    room_name: string;
-    share_txt: string;
-    share_image_url: string;
-    share_image_url_id: string;
-}
-
-interface ViewPortMessage extends OpenDataMessage {
-    box?: {
-        x?: number;
-        y?: number;
-        width?: number;
-        height?: number;
-    };
-}
-
-interface InviteShareConfig {
-    roomId: number;
-    roomName: string;
-    shareTxt: string;
-    shareImageUrl: string;
-    shareImageUrlId: string;
-}
-
 export default class InviteOpenDataModule {
     private _users: InviteUser[] = [];
     private _inviteView: UISocialInviteView | null = null;
-    private _isLoadingWxFriends = false;
-    private _hasLoadedWxFriends = false;
-
-    private _shareConfig: InviteShareConfig = {
+    private _loadingFriends = false;
+    private _loadedFriends = false;
+    private _shareConfig = {
         roomId: 0,
         roomName: "",
         shareTxt: "",
@@ -57,17 +26,36 @@ export default class InviteOpenDataModule {
     public handleMessage(message: OpenDataMessage): void {
         switch (message?.type) {
             case OpenDataCommand.ShowInviteFriend:
-                this.handleShowMessage(message as InviteShowMessage);
+                this._shareConfig = {
+                    roomId: Number(message.room_id),
+                    roomName: String(message.room_name || ""),
+                    shareTxt: String(message.share_txt || ""),
+                    shareImageUrl: String(message.share_image_url || ""),
+                    shareImageUrlId: String(message.share_image_url_id || ""),
+                };
+                this.loadFriends();
+                this.showView();
                 break;
             case OpenDataCommand.HideInviteFriend:
             case OpenDataCommand.Close:
-                this.hideInviteView();
+                this.hideView();
                 break;
-            case OpenDataCommand.UpdateViewPort:
-                this.handleUpdateViewPort(message as ViewPortMessage);
+            case OpenDataCommand.UpdateViewPort: {
+                const box = message.box as { width?: number; height?: number } | undefined;
+                if (!box) {
+                    break;
+                }
+                const width = Math.max(1, Math.floor(Number(box.width) || 0));
+                const height = Math.max(1, Math.floor(Number(box.height) || 0));
+                this._stage.size(width, height);
+                const canvas = typeof wx !== "undefined" && wx.getSharedCanvas ? wx.getSharedCanvas() : null;
+                if (canvas) {
+                    canvas.width = width;
+                    canvas.height = height;
+                }
+                this.onStageResize();
                 break;
-            default:
-                break;
+            }
         }
     }
 
@@ -76,166 +64,92 @@ export default class InviteOpenDataModule {
             return;
         }
         this._inviteView.size(this._stage.width, this._stage.height);
-        this._inviteView.layoutView();
+        this._inviteView.layout();
     }
 
-    private handleUpdateViewPort(message: ViewPortMessage): void {
-        const box = message?.box;
-        if (!box) {
-            return;
-        }
-
-        const width = Math.max(1, Math.floor(Number(box.width) || 0));
-        const height = Math.max(1, Math.floor(Number(box.height) || 0));
-        this._stage.size(width, height);
-
-        const canvas = typeof wx !== "undefined" && wx.getSharedCanvas ? wx.getSharedCanvas() : null;
-        if (canvas) {
-            canvas.width = width;
-            canvas.height = height;
-        }
-
-        this.onStageResize();
-    }
-
-    private handleShowMessage(message: InviteShowMessage): void {
-        this.applyShareConfig(message);
-        this.loadFriendListFromWx();
-        this.showInviteView();
-    }
-
-    private showInviteView(): void {
+    private showView(): void {
         if (!this._inviteView) {
             this._inviteView = new UISocialInviteView(
-                this.handleInviteUser.bind(this),
-                this.handleViewClose.bind(this)
+                (openid) => this.shareToFriend(openid),
+                () => this.hideView()
             );
         }
-
         this._inviteView.size(this._stage.width, this._stage.height);
-        this.refreshInviteView();
-
+        this._inviteView.setUsers(this._users);
         if (!this._inviteView.parent) {
             this._stage.addChild(this._inviteView);
         }
         this._inviteView.visible = true;
     }
 
-    private hideInviteView(): void {
-        if (!this._inviteView) {
-            return;
-        }
-        this._inviteView.onHide();
-        this._inviteView.removeSelf();
+    private hideView(): void {
+        this._inviteView?.removeSelf();
     }
 
-    private refreshIfVisible(): void {
-        if (!this._inviteView || !this._inviteView.parent) {
-            return;
+    private refreshView(): void {
+        if (this._inviteView?.parent) {
+            this._inviteView.setUsers(this._users);
         }
-        this.refreshInviteView();
     }
 
-    private handleInviteUser(openid: string): void {
-        this.shareToWxFriend(openid);
-    }
-
-    private handleViewClose(): void {
-        this.hideInviteView();
-    }
-
-    private refreshInviteView(): void {
-        if (!this._inviteView) {
+    private loadFriends(): void {
+        if (this._loadingFriends || this._loadedFriends || typeof wx === "undefined" || !wx.getFriendCloudStorage) {
             return;
         }
-        this._inviteView.setViewState({
-            users: this._users,
-        });
-    }
-
-    private loadFriendListFromWx(): void {
-        if (this._isLoadingWxFriends || this._hasLoadedWxFriends) {
-            return;
-        }
-        if (typeof wx === "undefined" || !wx.getFriendCloudStorage) {
-            return;
-        }
-
-        this._isLoadingWxFriends = true;
+        this._loadingFriends = true;
         wx.getFriendCloudStorage({
             keyList: ["invite_tag"],
-            success: (res: WxFriendCloudStorageResponse) => {
-                this._users = this.mapWxFriendList(Array.isArray(res?.data) ? res.data : []);
-                this._hasLoadedWxFriends = true;
-                this.refreshIfVisible();
+            success: (res) => {
+                this._users = this.mapFriends(Array.isArray(res?.data) ? res.data : []);
+                this._loadedFriends = true;
+                this.refreshView();
             },
             complete: () => {
-                this._isLoadingWxFriends = false;
+                this._loadingFriends = false;
             },
         });
     }
 
-    private mapWxFriendList(list: WxFriendCloudStorageItem[]): InviteUser[] {
+    private mapFriends(list: WxFriendItem[]): InviteUser[] {
         const result: InviteUser[] = [];
         const seen = new Set<string>();
-
-        for (const item of list || []) {
+        for (const item of list) {
             const openid = typeof item?.openid === "string" ? item.openid.trim() : "";
             if (!openid || seen.has(openid)) {
                 continue;
             }
             seen.add(openid);
+            const name = item?.nickName || item?.nickname;
             result.push({
                 openid,
-                nickName: this.pickDisplayName(item),
+                nickName: typeof name === "string" && name.trim() ? name : "微信好友",
                 avatarUrl: typeof item?.avatarUrl === "string" ? item.avatarUrl : "",
             });
         }
         return result;
     }
 
-    private shareToWxFriend(openid: string): void {
+    private shareToFriend(openid: string): void {
         if (typeof wx === "undefined") {
             return;
         }
-
         const query =
             "room_id=" + encodeURIComponent(String(this._shareConfig.roomId)) +
             "&room_name=" + encodeURIComponent(this._shareConfig.roomName) +
             "&invite_openid=" + encodeURIComponent(openid);
-
-        const sharePayload = {
+        const payload = {
             title: this._shareConfig.shareTxt,
             imageUrl: this._shareConfig.shareImageUrl,
             query,
         };
-
-        const wxApi = wx as any;
-        if (wxApi.shareMessageToFriend) {
-            wxApi.shareMessageToFriend({ ...sharePayload, openId: openid });
-            return;
-        }
-
-        if (wxApi.shareAppMessage) {
-            wxApi.shareAppMessage({
-                ...sharePayload,
-                imageUrlId: this._shareConfig.shareImageUrlId,
-            });
-        }
-    }
-
-    private pickDisplayName(item: WxFriendCloudStorageItem): string {
-        const name = item?.nickName || item?.nickname;
-        return typeof name === "string" && name.trim() ? name : "微信好友";
-    }
-
-    private applyShareConfig(message: InviteShowMessage): void {
-        this._shareConfig = {
-            roomId: Number(message.room_id),
-            roomName: String(message.room_name || ""),
-            shareTxt: String(message.share_txt || ""),
-            shareImageUrl: String(message.share_image_url || ""),
-            shareImageUrlId: String(message.share_image_url_id || ""),
+        const wxApi = wx as typeof wx & {
+            shareMessageToFriend?: (opts: typeof payload & { openId: string }) => void;
+            shareAppMessage?: (opts: typeof payload & { imageUrlId: string }) => void;
         };
+        if (wxApi.shareMessageToFriend) {
+            wxApi.shareMessageToFriend({ ...payload, openId: openid });
+        } else if (wxApi.shareAppMessage) {
+            wxApi.shareAppMessage({ ...payload, imageUrlId: this._shareConfig.shareImageUrlId });
+        }
     }
 }

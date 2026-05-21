@@ -8,13 +8,8 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $MainRoot = Split-Path -Parent $ProjectRoot
 
 if (-not $SourceDir) {
-    $candidates = @(
-        (Join-Path $ProjectRoot "release\wxgame"),
-        (Join-Path $ProjectRoot "release\weixinminigame"),
-        (Join-Path $ProjectRoot "release\wxminigame"),
-        (Join-Path $ProjectRoot "release\web")
-    )
-    foreach ($candidate in $candidates) {
+    foreach ($name in @("release\wxgame", "release\weixinminigame", "release\wxminigame")) {
+        $candidate = Join-Path $ProjectRoot $name
         if (Test-Path $candidate) {
             $SourceDir = $candidate
             break
@@ -30,6 +25,11 @@ if (-not (Test-Path $SourceDir)) {
     Write-Error "Build output not found. Build wxgame in Laya IDE first, or pass -SourceDir."
 }
 
+$bundlePath = Join-Path $SourceDir "js\bundle.js"
+if (-not (Test-Path $bundlePath)) {
+    Write-Error "js/bundle.js not found in build output."
+}
+
 Write-Host "Source: $SourceDir"
 Write-Host "Target: $TargetDir"
 
@@ -37,12 +37,8 @@ if (-not (Test-Path $TargetDir)) {
     New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
 }
 
-$keepFiles = @("weapp-adapter.js")
-$existing = Get-ChildItem -Path $TargetDir -Force -ErrorAction SilentlyContinue
-foreach ($item in $existing) {
-    if ($item.Name -in $keepFiles) {
-        continue
-    }
+foreach ($item in Get-ChildItem -Path $TargetDir -Force -ErrorAction SilentlyContinue) {
+    if ($item.Name -eq "weapp-adapter.js") { continue }
     if ($item.PSIsContainer) {
         Remove-Item -Path $item.FullName -Recurse -Force
     } else {
@@ -50,14 +46,9 @@ foreach ($item in $existing) {
     }
 }
 
-& (Join-Path $PSScriptRoot "patch-release-entry.ps1") -ReleaseDir $SourceDir
-
 Copy-Item -Path (Join-Path $SourceDir "*") -Destination $TargetDir -Recurse -Force
+Copy-Item -Path (Join-Path $PSScriptRoot "openDataContext-index.js") -Destination (Join-Path $TargetDir "index.js") -Force
 
-$EntryTemplate = Join-Path $PSScriptRoot "openDataContext-index.js"
-Copy-Item -Path $EntryTemplate -Destination (Join-Path $TargetDir "index.js") -Force
-
-# 轻量开放域：仅保留 laya.opendata.js，移除 UI2 完整引擎产物
 $OpenDataLib = Join-Path $PSScriptRoot "libs\laya.opendata.js"
 if (-not (Test-Path $OpenDataLib)) {
     Write-Error "Missing lightweight engine: $OpenDataLib"
@@ -68,34 +59,15 @@ if (-not (Test-Path $libsDir)) {
     New-Item -ItemType Directory -Path $libsDir -Force | Out-Null
 }
 
-$heavyLibs = @(
-    "laya.core.js",
-    "laya.webgl_2D.js",
-    "laya.ui2.js",
-    "laya.adapter-weixin.js"
-)
-foreach ($lib in $heavyLibs) {
+foreach ($lib in @("laya.core.js", "laya.webgl_2D.js", "laya.ui2.js", "laya.adapter-weixin.js")) {
     $path = Join-Path $libsDir $lib
-    if (Test-Path $path) {
-        Remove-Item -Path $path -Force
-    }
+    if (Test-Path $path) { Remove-Item -Path $path -Force }
 }
 Copy-Item -Path $OpenDataLib -Destination (Join-Path $libsDir "laya.opendata.js") -Force
 
-$removePaths = @(
-    "internal",
-    "prefab",
-    "image",
-    "Scene.ls",
-    "fileconfig.json",
-    "game.js",
-    (Join-Path "js" "index.js")
-)
-foreach ($relPath in $removePaths) {
+foreach ($relPath in @("internal", "prefab", "image", "Scene.ls", "fileconfig.json", "game.js", "js\index.js")) {
     $path = Join-Path $TargetDir $relPath
-    if (Test-Path $path) {
-        Remove-Item -Path $path -Recurse -Force
-    }
+    if (Test-Path $path) { Remove-Item -Path $path -Recurse -Force }
 }
 
 Write-Host "Deployed lightweight open data context to: $TargetDir"

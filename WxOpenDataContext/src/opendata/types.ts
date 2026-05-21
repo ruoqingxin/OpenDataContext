@@ -4,15 +4,14 @@ export interface InviteUser {
     avatarUrl: string;
 }
 
-export interface InviteViewState {
-    users: InviteUser[];
-}
-
 export interface OpenDataMessage {
     type: string;
     [key: string]: unknown;
 }
 
-export interface OpenDataBridge {
-    onMessage(handler: (msg: OpenDataMessage) => void): void;
-}
+export const OpenDataCommand = {
+    ShowInviteFriend: "od:showInviteFriend",
+    HideInviteFriend: "od:hideInviteFriend",
+    UpdateViewPort: "updateViewPort",
+    Close: "close",
+} as const;
