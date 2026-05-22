@@ -48165,6 +48165,20 @@ ${stack}
       if (!this.wechat_panel || !this.wechat_panel.activeInHierarchy) {
         return;
       }
+
+      console.error("box_openData",this.box_openData.width,this.box_openData.height);
+      console.error("wechat_panel",this.wechat_panel.width,this.wechat_panel.height);
+ 
+      this.wechat_panel.width=this.box_openData.width;
+      this.wechat_panel.height=this.box_openData.height;
+
+
+      console.warn("box_openData",this.box_openData.width,this.box_openData.height);
+      console.warn("wechat_panel",this.wechat_panel.width,this.wechat_panel.height);
+
+
+
+
       this.wechat_panel.updateViewPort();
       this.wechat_panel.postMsg(msg);
       Laya.timer.frameOnce(1, this, this.refreshWechatViewPort);
@@ -48173,6 +48187,9 @@ ${stack}
       if (!this.wechat_panel || !this.wechat_panel.activeInHierarchy) {
         return;
       }
+      this.wechat_panel.width=this.box_openData.width;
+      this.wechat_panel.height=this.box_openData.height;
+
       this.wechat_panel.updateViewPort();
     }
     getRoomRoundMinute(roomInfo) {
@@ -48191,6 +48208,10 @@ ${stack}
       Laya.timer.clear(this, this.postWechatInviteShow);
       Laya.timer.clear(this, this.refreshWechatViewPort);
       if (this.wechat_panel) {
+
+        this.wechat_panel.width=this.box_openData.width;
+        this.wechat_panel.height=this.box_openData.height;
+
         this.wechat_panel.postMsg({ type: "od:hideInviteFriend" });
         this.wechat_panel.updateViewPort();
       }

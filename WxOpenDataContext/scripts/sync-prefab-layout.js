@@ -19,6 +19,12 @@ const SYNC_HINTS = {
     listName: "list_items",
     emptyText: "暂无可邀请的微信好友",
     nickFallback: "玩家昵称",
+    /**
+     * 开放域 canvas 对应主域 OpenDataContextView，原点已在标题下方。
+     * prefab 里 list.y 是相对全屏 UI，映射到开放域后 list marginTop 应为 0。
+     * 参考 openDataContext/render/style.js: list@16,0
+     */
+    openDataListMarginTop: 0,
 };
 
 const TYPE_IMAGE = new Set(["GImage", "GLoader", "Image"]);
@@ -310,6 +316,82 @@ function renderStyleObject(obj, indent) {
     return lines.join("\n");
 }
 
+function buildCreateStyleBlock(
+    designW,
+    designH,
+    listX,
+    listY,
+    listW,
+    listH,
+    listEntry,
+    itemEntry,
+    itemLayout,
+    staticLayout
+) {
+    const openDataListTop = SYNC_HINTS.openDataListMarginTop;
+    const openDataFallbackHeight = designH - listY;
+    const lines = [
+        "// layout from prefab/UISocialInviteView.lh",
+        "// nodes resolved by sync-prefab-layout.js",
+        `// openData viewport: list@${listX},${openDataListTop} (prefab list.y=${listY} 为全屏坐标，开放域不重复偏移)`,
+        `// list: ${listEntry.path}`,
+        `// item: ${itemEntry.path}`,
+        "",
+        "module.exports = function createStyle(options) {",
+        "    options = options || {};",
+        "",
+        "    const viewPort = options.viewPort || null;",
+        "    const listHeight =",
+        "        viewPort && Number(viewPort.height) > 0",
+        "            ? Number(viewPort.height)",
+        `            : ${openDataFallbackHeight};`,
+        "",
+        "    return {",
+        "        container: {",
+        `            width: ${designW},`,
+        `            height: ${designH},`,
+        '            flexDirection: "column",',
+    ];
+
+    if (staticLayout.specs.length) {
+        lines.push('            position: "relative",');
+    }
+
+    lines.push(
+        "        },",
+        "        list: {",
+        `            width: ${listW},`,
+        "            height: listHeight,",
+        `            marginLeft: ${listX},`,
+        `            marginTop: ${openDataListTop},`,
+        "            scrollY: true,",
+        '            flexDirection: "column",',
+        '            alignItems: "center",',
+        "        },",
+        "        emptyText: {",
+        `            width: ${listW},`,
+        `            height: ${listH},`,
+        `            marginLeft: ${listX},`,
+        `            marginTop: ${listY},`,
+        "            fontSize: 24,",
+        '            color: "#999999",',
+        '            textAlign: "center",',
+        `            lineHeight: ${listH},`,
+        "        },"
+    );
+
+    for (const [key, value] of Object.entries(itemLayout.styles)) {
+        lines.push(`        ${key}: ${renderStyleObject(value, 8)},`);
+    }
+
+    for (const [key, value] of Object.entries(staticLayout.styles)) {
+        lines.push(`        ${key}: ${renderStyleObject(value, 8)},`);
+    }
+
+    lines.push("    };", "};");
+    return lines.join("\n");
+}
+
 function buildItemStyles(itemEntry, roles, uuidMap, rowGap) {
     const itemNode = itemEntry.node;
     const itemW = num(itemNode.width);
@@ -474,54 +556,18 @@ if (!itemLayout.bgPath || !itemLayout.headPath || !itemLayout.btnPath) {
 const staticNodes = resolveStaticNodes(index, listEntry);
 const staticLayout = buildStaticStyles(staticNodes, uuidMap);
 
-const styleLines = [
-    "// layout from prefab/UISocialInviteView.lh",
-    "// nodes resolved by sync-prefab-layout.js",
-    `// list: ${listEntry.path}`,
-    `// item: ${itemEntry.path}`,
-    "module.exports = {",
-    "    container: {",
-    `        width: ${designW},`,
-    `        height: ${designH},`,
-    '        flexDirection: "column",',
-];
-
-if (staticLayout.specs.length) {
-    styleLines.push('        position: "relative",');
-}
-
-styleLines.push(
-    "    },",
-    "    list: {",
-    `        width: ${listW},`,
-    `        height: ${listH},`,
-    `        marginLeft: ${listX},`,
-    `        marginTop: ${listY},`,
-    "        scrollY: true,",
-    '        flexDirection: "column",',
-    "    },",
-    "    emptyText: {",
-    `        width: ${listW},`,
-    `        height: ${listH},`,
-    `        marginLeft: ${listX},`,
-    `        marginTop: ${listY},`,
-    "        fontSize: 24,",
-    '        color: "#999999",',
-    '        textAlign: "center",',
-    `        lineHeight: ${listH},`,
-    "    },"
+const styleBlockText = buildCreateStyleBlock(
+    designW,
+    designH,
+    listX,
+    listY,
+    listW,
+    listH,
+    listEntry,
+    itemEntry,
+    itemLayout,
+    staticLayout
 );
-
-for (const [key, value] of Object.entries(itemLayout.styles)) {
-    styleLines.push(`    ${key}: ${renderStyleObject(value, 4)},`);
-}
-
-for (const [key, value] of Object.entries(staticLayout.styles)) {
-    styleLines.push(`    ${key}: ${renderStyleObject(value, 4)},`);
-}
-
-styleLines.push("};");
-const styleBlockText = styleLines.join("\n");
 
 const tplfnBlock = [
     "// template from prefab/UISocialInviteView.lh",
@@ -539,7 +585,7 @@ const tplfnBlock = [
     "    if (!data.length) {",
     `        out += '<text id="emptyText" class="emptyText" value="${SYNC_HINTS.emptyText.replace(/"/g, "&quot;")}"></text>';`,
     "    } else {",
-    '        out += \'<scrollview id="list" class="list">\';',
+    '        out += \'<scrollview id="list" class="list" scrollY="true">\';',
     "        for (var i = 0; i < data.length; i++) {",
     "            var item = data[i];",
     `            var avatar = item.avatarUrl ? item.avatarUrl : "${itemLayout.headPath}";`,

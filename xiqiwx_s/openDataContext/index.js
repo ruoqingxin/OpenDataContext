@@ -1,6 +1,6 @@
 require("./weapp-adapter.js");
 
-const style = require("./render/style.js");
+const createStyle = require("./render/style.js");
 const tplFn = require("./render/tplfn.js");
 const localImages = require("./render/assets.js");
 const Layout = require("./engine.js").default;
@@ -22,13 +22,17 @@ let shareConfig = {
     shareImageUrl: "",
     shareImageUrlId: "",
 };
+
 let users = [];
 let visible = false;
+let viewportReady = false;
+let pendingDraw = false;
 let loadingFriends = false;
 let loadedFriends = false;
 let imagesReady = false;
 let imagesLoading = false;
 let imageLoadQueue = [];
+let currentViewPort = null;
 
 function resolveLocalImage(storedPath) {
     if (!storedPath || /^https?:\/\//i.test(storedPath)) {
@@ -40,21 +44,32 @@ function resolveLocalImage(storedPath) {
         normalized.indexOf("openDataContext/") === 0
             ? normalized.slice("openDataContext/".length)
             : normalized;
+
     const gameRootPath =
         normalized.indexOf("openDataContext/") === 0
             ? normalized
             : "openDataContext/" + normalized;
 
-    const candidates = [shortPath, "./" + shortPath, gameRootPath, "./" + gameRootPath];
+    const candidates = [
+        shortPath,
+        "./" + shortPath,
+        gameRootPath,
+        "./" + gameRootPath,
+    ];
+
     const tried = [];
+
     if (typeof wx !== "undefined" && wx.getFileSystemManager) {
         const fs = wx.getFileSystemManager();
+
         for (let i = 0; i < candidates.length; i++) {
             const candidate = candidates[i];
             if (tried.indexOf(candidate) >= 0) {
                 continue;
             }
+
             tried.push(candidate);
+
             try {
                 fs.accessSync(candidate);
                 return gameRootPath;
@@ -62,6 +77,7 @@ function resolveLocalImage(storedPath) {
                 // try next candidate
             }
         }
+
         console.warn(
             "[OpenData] image not found, expected under openDataContext/image/:",
             gameRootPath,
@@ -69,6 +85,7 @@ function resolveLocalImage(storedPath) {
             tried.join(", ")
         );
     }
+
     return gameRootPath;
 }
 
@@ -77,21 +94,29 @@ function ensureImagesLoaded(callback) {
         callback();
         return;
     }
+
     imageLoadQueue.push(callback);
+
     if (imagesLoading) {
         return;
     }
+
     imagesLoading = true;
+
     const sources = localImages.map(resolveLocalImage);
+
     const finish = function () {
         imagesReady = true;
         imagesLoading = false;
+
         const queue = imageLoadQueue.slice();
         imageLoadQueue.length = 0;
+
         for (let i = 0; i < queue.length; i++) {
             queue[i]();
         }
     };
+
     if (typeof Layout.loadImgs === "function") {
         Layout.loadImgs(sources)
             .then(finish)
@@ -102,26 +127,33 @@ function ensureImagesLoaded(callback) {
             });
         return;
     }
+
     finish();
 }
 
 function mapFriends(list) {
     const result = [];
     const seen = new Set();
+
     for (let i = 0; i < list.length; i++) {
         const item = list[i];
         const openid = typeof item.openid === "string" ? item.openid.trim() : "";
+
         if (!openid || seen.has(openid)) {
             continue;
         }
+
         seen.add(openid);
+
         const name = item.nickName || item.nickname;
+
         result.push({
             openid: openid,
             nickName: typeof name === "string" && name.trim() ? name : "微信好友",
             avatarUrl: typeof item.avatarUrl === "string" ? item.avatarUrl : "",
         });
     }
+
     return result;
 }
 
@@ -132,6 +164,7 @@ function loadFriends(done) {
         }
         return;
     }
+
     loadingFriends = true;
 
     let cloudFriends = [];
@@ -141,13 +174,16 @@ function loadFriends(done) {
 
     function finishSource() {
         pending--;
+
         if (pending > 0 || settled) {
             return;
         }
+
         settled = true;
         users = mapFriends(cloudFriends.concat(potentialFriends));
         loadedFriends = true;
         loadingFriends = false;
+
         if (typeof done === "function") {
             done();
         }
@@ -158,9 +194,6 @@ function loadFriends(done) {
     }
 
     startSource();
-
-    console.error("wx.getFriendCloudStorage");
-
     wx.getFriendCloudStorage({
         keyList: ["kv_data"],
         success: function (res) {
@@ -185,15 +218,21 @@ function shareToFriend(openid) {
         "room_id=" + encodeURIComponent(String(shareConfig.roomId)) +
         "&room_name=" + encodeURIComponent(shareConfig.roomName) +
         "&invite_openid=" + encodeURIComponent(openid);
+
     const payload = {
         title: shareConfig.shareTxt,
         imageUrl: shareConfig.shareImageUrl,
         query: query,
     };
+
     if (typeof wx.shareMessageToFriend === "function") {
-        wx.shareMessageToFriend(Object.assign({}, payload, { openId: openid }));
+        wx.shareMessageToFriend(
+            Object.assign({}, payload, { openId: openid })
+        );
     } else if (typeof wx.shareAppMessage === "function") {
-        wx.shareAppMessage(Object.assign({}, payload, { imageUrlId: shareConfig.shareImageUrlId }));
+        wx.shareAppMessage(
+            Object.assign({}, payload, { imageUrlId: shareConfig.shareImageUrlId })
+        );
     }
 }
 
@@ -203,9 +242,11 @@ function bindInviteEvents() {
             const user = users[index];
             const elements = Layout.getElementsById("btn_" + index);
             const btn = elements && elements[0];
+
             if (!btn || !user) {
                 return;
             }
+
             btn.on("click", function () {
                 shareToFriend(user.openid);
             });
@@ -214,16 +255,43 @@ function bindInviteEvents() {
 }
 
 function draw() {
-    if (!visible) {
+    if (!visible || !viewportReady) {
         return;
     }
+
     ensureImagesLoaded(function () {
         const template = tplFn({ data: users });
+
+        const style = createStyle({
+            viewPort: currentViewPort,
+        });
+
         Layout.clear();
         Layout.init(template, style);
         Layout.layout(sharedContext);
         bindInviteEvents();
     });
+}
+
+function requestDraw() {
+    pendingDraw = true;
+    if (!visible || !viewportReady) {
+        return;
+    }
+    pendingDraw = false;
+    draw();
+}
+
+function applyViewPort(box) {
+    if (!box || !box.width || !box.height) {
+        return;
+    }
+    currentViewPort = box;
+    Layout.updateViewPort(box);
+    viewportReady = true;
+    if (visible) {
+        requestDraw();
+    }
 }
 
 function showInvite(message) {
@@ -234,12 +302,15 @@ function showInvite(message) {
         shareImageUrl: String(message.share_image_url || ""),
         shareImageUrlId: String(message.share_image_url_id || ""),
     };
+
     visible = true;
-    loadFriends(draw);
+    loadFriends(requestDraw);
 }
 
 function hideInvite() {
     visible = false;
+    pendingDraw = false;
+    viewportReady = false;
     Layout.clear();
 }
 
@@ -249,24 +320,20 @@ function init() {
             return;
         }
 
-        console.error("onMessage"+JSON.stringify(data))
-
         switch (data.type) {
             case OpenDataCommand.UpdateViewPort:
-                if (data.box) {
-                    Layout.updateViewPort(data.box);
-                }
-                if (visible) {
-                    draw();
-                }
+                applyViewPort(data.box);
                 break;
+
             case OpenDataCommand.ShowInviteFriend:
                 showInvite(data);
                 break;
+
             case OpenDataCommand.HideInviteFriend:
             case OpenDataCommand.Close:
                 hideInvite();
                 break;
+
             default:
                 break;
         }
