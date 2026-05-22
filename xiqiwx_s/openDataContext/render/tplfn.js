@@ -14,7 +14,7 @@ function tplFunc(it) {
     if (!data.length) {
         out += '<text id="emptyText" class="emptyText" value="暂无可邀请的微信好友"></text>';
     } else {
-        out += '<scrollview id="list" class="list">';
+        out += '<scrollview id="list" class="list" scrollY="true">';
         for (var i = 0; i < data.length; i++) {
             var item = data[i];
             var avatar = item.avatarUrl ? item.avatarUrl : "openDataContext/image/icon_800000.png";

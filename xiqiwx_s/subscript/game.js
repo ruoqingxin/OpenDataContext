@@ -47925,6 +47925,8 @@ ${stack}
     }
     onClose() {
       Laya.timer.clear(this, this.onInviteCDTick);
+      Laya.timer.clear(this, this.postWechatInviteShow);
+      Laya.timer.clear(this, this.refreshWechatViewPort);
       this.hideWechatInvitePanel();
       this.ruleCfg = null;
     }
@@ -48014,15 +48016,27 @@ ${stack}
       this.list_items.rootNode.height = showClub ? this.listHWithClub : this.listHNoClub;
     }
     setWechatMode(isWechatTab) {
+      var _a;
+      if (!isWechatTab) {
+        this.hideWechatInvitePanel();
+      }
       this.list_items.setActive(!isWechatTab);
+      if ((_a = this.list_items) == null ? void 0 : _a.rootNode) {
+        this.list_items.rootNode.mouseEnabled = !isWechatTab;
+      }
       if (this.box_openData) {
         UIUtils.setActive(this.box_openData, isWechatTab);
+        this.box_openData.mouseEnabled = isWechatTab;
       }
       if (this.wechat_panel) {
         UIUtils.setActive(this.wechat_panel, isWechatTab);
+        this.wechat_panel.mouseEnabled = isWechatTab;
       }
-      if (!isWechatTab) {
-        this.hideWechatInvitePanel();
+      if (this.btn_wx_sq) {
+        this.btn_wx_sq.mouseEnabled = isWechatTab;
+      }
+      if (this.txt_empty) {
+        this.txt_empty.mouseEnabled = isWechatTab;
       }
       UIUtils.setActive(this.btn_wx_sq, isWechatTab && !this.hasWxFriendAuth);
     }
@@ -48059,9 +48073,6 @@ ${stack}
                 },
                 fail: () => {
                   this.hasWxFriendAuth = false;
-
-                  console.error(" authorize  fail 111")
-
                   successBack == null ? void 0 : successBack();
                 }
               });
@@ -48102,12 +48113,8 @@ ${stack}
       });
     }
     sendWechatInviteData() {
-
-
-      console.error("sendWechatInviteData111")
-
       var _a, _b;
-      if (!DeviceUtils.ins().isWxGame) {
+      if (!DeviceUtils.ins().isWxGame || !this.wechat_panel) {
         return;
       }
       const roomInfo = GameRoomData.ins().roomInfo;
@@ -48150,13 +48157,23 @@ ${stack}
         share_image_url: commonShareConfig.png_address,
         share_image_url_id: commonShareConfig.png_id
       };
-      console.error("sendWechatInviteData112")
-
-      UIUtils.setActive(this.box_openData, true);
-      UIUtils.setActive(this.wechat_panel, true);
-
+      Laya.timer.clear(this, this.postWechatInviteShow);
+      Laya.timer.once(50, this, this.postWechatInviteShow, [msg]);
+    }
+    /** 等 OpenDataContextView 布局完成后再同步视口并显示，避免错位与首帧黑屏 */
+    postWechatInviteShow(msg) {
+      if (!this.wechat_panel || !this.wechat_panel.activeInHierarchy) {
+        return;
+      }
       this.wechat_panel.updateViewPort();
       this.wechat_panel.postMsg(msg);
+      Laya.timer.frameOnce(1, this, this.refreshWechatViewPort);
+    }
+    refreshWechatViewPort() {
+      if (!this.wechat_panel || !this.wechat_panel.activeInHierarchy) {
+        return;
+      }
+      this.wechat_panel.updateViewPort();
     }
     getRoomRoundMinute(roomInfo) {
       var _a, _b, _c;
@@ -48171,9 +48188,11 @@ ${stack}
       if (!DeviceUtils.ins().isWxGame) {
         return;
       }
+      Laya.timer.clear(this, this.postWechatInviteShow);
+      Laya.timer.clear(this, this.refreshWechatViewPort);
       if (this.wechat_panel) {
-        this.wechat_panel.updateViewPort();
         this.wechat_panel.postMsg({ type: "od:hideInviteFriend" });
+        this.wechat_panel.updateViewPort();
       }
     }
     onClickTabList(index) {
