@@ -9,14 +9,14 @@ module.exports = function createStyle(options) {
 
   const viewPort = options.viewPort || null;
   const canvasHeight = Number(options.canvasHeight) > 0 ? Number(options.canvasHeight) : 1280;
-   
+
   // 逻辑坐标宽度固定，保证 item 内部布局不变
   const rootWidth = 720;
-   
+
   // 根布局高度必须跟 sharedCanvas.height 走
   // 不能直接用 viewport.height，否则会把 Y 轴缩放吃掉
   const rootHeight = canvasHeight;
-   
+
   // 列表逻辑高度也跟随 sharedCanvas 逻辑高度
   const listHeight = rootHeight;
 
@@ -27,11 +27,11 @@ module.exports = function createStyle(options) {
       flexDirection: "column",
 
       // 调试时可打开
-       backgroundColor: "rgba(255,0,0,0.15)",
+      backgroundColor: "rgba(255,0,0,0.15)",
     },
 
     list: {
-      width: 696,
+      width: 688,
       height: listHeight,
       marginLeft: 12,
       marginTop: 0,
@@ -39,11 +39,11 @@ module.exports = function createStyle(options) {
       flexDirection: "column",
 
       // 调试时可打开
-       backgroundColor: "rgba(0,255,0,0.15)",
+      backgroundColor: "rgba(0,255,0,0.15)",
     },
 
     emptyText: {
-      width: 696,
+      width: 688,
       height: listHeight,
       marginLeft: 12,
       marginTop: 0,
@@ -52,39 +52,34 @@ module.exports = function createStyle(options) {
       textAlign: "center",
       lineHeight: listHeight,
     },
-
     item: {
       width: 688,
-      height: 200,
+      height: 185,
       position: "relative",
       marginLeft: 4,
     },
-
     itemBg: {
       position: "absolute",
       left: 0,
-      top: 28,
+      top: 12,
       width: 688,
       height: 172,
     },
-
     itemRow: {
       width: 688,
-      height: 200,
+      height: 185,
       flexDirection: "row",
       alignItems: "center",
       paddingLeft: 38,
       paddingRight: 26,
-      paddingTop: 64,
-      paddingBottom: 21,
+      paddingTop: 48,
+      paddingBottom: 37,
     },
-
     itemHead: {
       width: 100,
       height: 100,
       borderRadius: 50,
     },
-
     itemNick: {
       fontSize: 32,
       color: "#8a5839",
@@ -95,28 +90,26 @@ module.exports = function createStyle(options) {
       textStrokeWidth: 1,
       marginLeft: 24,
     },
-
     itemBtn: {
       position: "absolute",
       left: 502,
-      top: 82,
+      top: 66,
       width: 161,
       height: 64,
     },
-
     itemBtnText: {
+      fontSize: 32,
+      color: "#f8fde4",
+      verticalAlign: "middle",
+      width: 161,
+      height: 64,
+      textAlign: "center",
+      textStrokeWidth: 4,
+      textStrokeColor: "#4d7b26",
       position: "absolute",
       left: 0,
       top: 0,
-      width: 161,
-      height: 64,
       lineHeight: 64,
-      fontSize: 32,
-      color: "#f8fde4",
-      textAlign: "center",
-      verticalAlign: "middle",
-      textStrokeWidth: 4,
-      textStrokeColor: "#4d7b26",
     },
   };
 
