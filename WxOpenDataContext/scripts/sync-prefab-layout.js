@@ -329,27 +329,27 @@ function buildCreateStyleBlock(
     staticLayout
 ) {
     const openDataListTop = SYNC_HINTS.openDataListMarginTop;
-    const openDataFallbackHeight = designH - listY;
     const lines = [
         "// layout from prefab/UISocialInviteView.lh",
         "// nodes resolved by sync-prefab-layout.js",
-        `// openData viewport: list@${listX},${openDataListTop} (prefab list.y=${listY} 为全屏坐标，开放域不重复偏移)`,
         `// list: ${listEntry.path}`,
         `// item: ${itemEntry.path}`,
         "",
         "module.exports = function createStyle(options) {",
         "    options = options || {};",
         "",
-        "    const viewPort = options.viewPort || null;",
-        "    const listHeight =",
-        "        viewPort && Number(viewPort.height) > 0",
-        "            ? Number(viewPort.height)",
-        `            : ${openDataFallbackHeight};`,
+        `    const canvasWidth = Number(options.canvasWidth) > 0 ? Number(options.canvasWidth) : ${designW};`,
+        `    const canvasHeight = Number(options.canvasHeight) > 0 ? Number(options.canvasHeight) : ${designH};`,
+        "",
+        "    const rootWidth = canvasWidth;",
+        "    const rootHeight = canvasHeight;",
+        "",
+        "    const listHeight = rootHeight;",
         "",
         "    return {",
         "        container: {",
-        `            width: ${designW},`,
-        `            height: ${designH},`,
+        "            width: rootWidth,",
+        "            height: rootHeight,",
         '            flexDirection: "column",',
     ];
 
@@ -366,7 +366,6 @@ function buildCreateStyleBlock(
         `            marginTop: ${openDataListTop},`,
         "            scrollY: true,",
         '            flexDirection: "column",',
-        '            alignItems: "center",',
         "        },",
         "        emptyText: {",
         `            width: ${listW},`,
