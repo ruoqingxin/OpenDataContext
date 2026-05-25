@@ -23,10 +23,10 @@ function tplFunc(it) {
             out += '<view class="itemRow">';
             out += '<image class="itemHead" src="' + escapeAttr(avatar) + '"></image>';
             out += '<text class="itemNick" value="' + escapeAttr(item.nickName || "玩家昵称") + '"></text>';
-            out += '<view class="itemBtnWrap">';
-            out += '<image id="btn_' + i + '" class="itemBtn" src="openDataContext/image/ui_btn_ty_g2.png"></image>';
+            out += "</view>";
+            out += '<image id="btn_' + i + '" class="itemBtn" src="openDataContext/image/ui_btn_ty_g2.png">';
             out += '<text class="itemBtnText" value="邀请"></text>';
-            out += "</view></view></view>";
+            out += "</image></view>";
         }
         out += "</scrollview>";
     }

@@ -24317,15 +24317,17 @@ APP版本号:${appVersion}
     }
     static loadCfg(callback) {
       let useTestCfg = false;
+      let testCfgUrl = "";
       if (DeviceUtils.ins().isDevelop()) {
         const localCfg = DeviceUtils.ins().getQueryVariable("testcfg");
         if (!StringUtils.isNullOrEmpty(localCfg)) {
           useTestCfg = true;
+          testCfgUrl = localCfg.startsWith("http") ? localCfg : `${AppConfig.url}/convert`;
         }
       }
       let url = this._configPath;
       if (useTestCfg) {
-        url = `${AppConfig.url}/convert/configbin.bin?v=${Date.now()}`;
+        url = `${testCfgUrl}/configbin.bin?v=${Date.now()}`;
         console.log("useTestCfg", url);
       }
       Laya.loader.load(url, Laya.Handler.create(this, (res) => {
@@ -37531,16 +37533,6 @@ ${stack}
       this.autoUseCards.lz = !!value;
     }
     /**
-    * 是否手动学习
-     */
-    set manualLearn(value) {
-      this.savedData.manualLearn = value;
-      this.updateSettings();
-    }
-    get manualLearn() {
-      return this.savedData.manualLearn;
-    }
-    /**
     * 等级加速卡自动使用
     */
     get autoUseJsCard() {
@@ -37850,8 +37842,6 @@ ${stack}
       //是否允许观战
       this.isMatchHistory = true;
       //是否显示历史战绩
-      this.manualLearn = false;
-      //是否手动学习
       this.lowFrame = false;
       //low = 30fps normal = 60fps
       this.is3DView = true;
@@ -47906,6 +47896,7 @@ ${stack}
         this.addClickListener(this.btn_wx_sq, this.onClickWxAuthBtn);
       }
       this.setWechatMode(false);
+      this.syncWechatPanelToBlueBox();
     }
     onRegisterEvent() {
       this.registerEvent(2 /* SocialChange */, this.updateView);
@@ -47936,6 +47927,8 @@ ${stack}
         this.list_items.array = [];
         this.setWechatMode(false);
         this.updateClubPanel(false);
+        this.updateListLayout(false);
+        this.syncWechatPanelToBlueBox();
         return;
       }
       if (DeviceUtils.ins().isWxGame) {
@@ -47943,12 +47936,15 @@ ${stack}
         this.setWechatMode(isWechatTab);
         if (isWechatTab) {
           this.updateClubPanel(false);
+          this.updateListLayout(false);
+          this.syncWechatPanelToBlueBox();
           this.tryShowWechatInvite();
           return;
         }
       }
       const showClub = this.activeTab === 0 /* Friend */ && this.updateClubPanel(true);
       this.updateListLayout(showClub);
+      this.syncWechatPanelToBlueBox();
       const attList = SocialData.ins().getAttentionList();
       this.list_items.setUpdateParam(this.inviteMap, this.ruleCfg, this.activeTab);
       const inviteList = [];
@@ -48011,9 +48007,38 @@ ${stack}
       this.refreshClubInviteState();
       return true;
     }
+    /** 只服务主域普通好友列表，不参与开放域窗口计算 */
     updateListLayout(showClub) {
+      var _a;
+      if (!((_a = this.list_items) == null ? void 0 : _a.rootNode)) {
+        return;
+      }
       this.list_items.rootNode.y = showClub ? this.listYWithClub : this.listYNoClub;
       this.list_items.rootNode.height = showClub ? this.listHWithClub : this.listHNoClub;
+    }
+    /**
+     * 关键修正：
+     * 已确认 wechat_panel 与 box_openData 是同级节点，不是父子关系。
+     * 所以 wechat_panel 必须直接摆到 blueBox 的真实位置，而不是 0,0。
+     */
+    syncWechatPanelToBlueBox() {
+      if (!this.box_openData || !this.wechat_panel) {
+        return;
+      }
+      this.wechat_panel.x = this.box_openData.x;
+      this.wechat_panel.y = this.box_openData.y;
+      this.wechat_panel.width = this.box_openData.width;
+      this.wechat_panel.height = this.box_openData.height;
+      this.logWechatRect("syncWechatPanelToBlueBox", {
+        blueBox: {
+          x: this.box_openData.x,
+          y: this.box_openData.y,
+          width: this.box_openData.width,
+          height: this.box_openData.height,
+          scaleX: this.box_openData.scaleX,
+          scaleY: this.box_openData.scaleY
+        }
+      });
     }
     setWechatMode(isWechatTab) {
       var _a;
@@ -48039,6 +48064,9 @@ ${stack}
         this.txt_empty.mouseEnabled = isWechatTab;
       }
       UIUtils.setActive(this.btn_wx_sq, isWechatTab && !this.hasWxFriendAuth);
+      if (isWechatTab) {
+        this.syncWechatPanelToBlueBox();
+      }
     }
     tryShowWechatInvite() {
       if (!DeviceUtils.ins().isWxGame) {
@@ -48046,11 +48074,10 @@ ${stack}
         this.txt_empty.text = "微信好友邀请仅微信环境可用";
         return;
       }
-      this.tryWxFriendInteractionAuth(() => {
-        this.onWxAuthSuccess();
-      }, () => {
-        this.onWxAuthFail();
-      });
+      this.tryWxFriendInteractionAuth(
+        () => this.onWxAuthSuccess(),
+        () => this.onWxAuthFail()
+      );
     }
     tryWxFriendInteractionAuth(successBack, failBack) {
       wx.getSetting({
@@ -48113,7 +48140,7 @@ ${stack}
       });
     }
     sendWechatInviteData() {
-      var _a, _b;
+      var _a;
       if (!DeviceUtils.ins().isWxGame || !this.wechat_panel) {
         return;
       }
@@ -48131,13 +48158,13 @@ ${stack}
         console.error("未配置分享", roomFuncId);
         return;
       }
-      let adConfig = ConfigUtil.Tables.ad_point.get(adId);
+      const adConfig = ConfigUtil.Tables.ad_point.get(adId);
       if (!adConfig) {
         console.error("未配置分享图id", adId);
         return;
       }
-      let share_imgId = MathUtil.randomArray(adConfig.common_share_id);
-      const commonShareConfig = AdData.ins().getAdShareCommonCfg(share_imgId);
+      const shareImgId = MathUtil.randomArray(adConfig.common_share_id);
+      const commonShareConfig = AdData.ins().getAdShareCommonCfg(shareImgId);
       if (!commonShareConfig) {
         console.error("未配置common_share表", adId);
         return;
@@ -48151,7 +48178,7 @@ ${stack}
       });
       const msg = {
         type: "od:showInviteFriend",
-        room_id: ((_b = GameRoomData.ins().roomInfo) == null ? void 0 : _b.room_id) || 0,
+        room_id: roomInfo.room_id || 0,
         room_name: PlayerData.ins().name,
         share_txt: title2,
         share_image_url: commonShareConfig.png_address,
@@ -48160,41 +48187,35 @@ ${stack}
       Laya.timer.clear(this, this.postWechatInviteShow);
       Laya.timer.once(50, this, this.postWechatInviteShow, [msg]);
     }
-    /** 等 OpenDataContextView 布局完成后再同步视口并显示，避免错位与首帧黑屏 */
+    /**
+     * 同级节点结构下的正确顺序：
+     * 1. 先把 wechat_panel 摆到 blueBox 真实位置
+     * 2. 再调用自动 updateViewPort()
+     * 3. 再发业务消息
+     */
     postWechatInviteShow(msg) {
       if (!this.wechat_panel || !this.wechat_panel.activeInHierarchy) {
         return;
       }
-
-      console.error("box_openData",this.box_openData.width,this.box_openData.height);
-      console.error("wechat_panel",this.wechat_panel.width,this.wechat_panel.height);
- 
-      this.wechat_panel.width=this.box_openData.width;
-      this.wechat_panel.height=this.box_openData.height;
-
-
-      console.warn("box_openData",this.box_openData.width,this.box_openData.height);
-      console.warn("wechat_panel",this.wechat_panel.width,this.wechat_panel.height);
-
-
-
-
+      this.syncWechatPanelToBlueBox();
       this.wechat_panel.updateViewPort();
       this.wechat_panel.postMsg(msg);
+      this.logWechatRect("postWechatInviteShow.beforeRefresh");
       Laya.timer.frameOnce(1, this, this.refreshWechatViewPort);
     }
     refreshWechatViewPort() {
       if (!this.wechat_panel || !this.wechat_panel.activeInHierarchy) {
         return;
       }
-      this.wechat_panel.width=this.box_openData.width;
-      this.wechat_panel.height=this.box_openData.height;
-
+      this.syncWechatPanelToBlueBox();
       this.wechat_panel.updateViewPort();
+      this.logWechatRect("refreshWechatViewPort");
     }
     getRoomRoundMinute(roomInfo) {
       var _a, _b, _c;
-      const roundTimeSecond = Number(((_a = roomInfo == null ? void 0 : roomInfo.room_option) == null ? void 0 : _a.round_time) || (((_c = (_b = this.ruleCfg) == null ? void 0 : _b.round_time) == null ? void 0 : _c[0]) || 0) * 60);
+      const roundTimeSecond = Number(
+        ((_a = roomInfo == null ? void 0 : roomInfo.room_option) == null ? void 0 : _a.round_time) || (((_c = (_b = this.ruleCfg) == null ? void 0 : _b.round_time) == null ? void 0 : _c[0]) || 0) * 60
+      );
       return Math.max(0, Math.floor(roundTimeSecond / 60));
     }
     getRoomStepSecond(roomInfo) {
@@ -48208,12 +48229,7 @@ ${stack}
       Laya.timer.clear(this, this.postWechatInviteShow);
       Laya.timer.clear(this, this.refreshWechatViewPort);
       if (this.wechat_panel) {
-
-        this.wechat_panel.width=this.box_openData.width;
-        this.wechat_panel.height=this.box_openData.height;
-
         this.wechat_panel.postMsg({ type: "od:hideInviteFriend" });
-        this.wechat_panel.updateViewPort();
       }
     }
     onClickTabList(index) {
@@ -48309,6 +48325,40 @@ ${stack}
         this.list_items.refresh();
       }
     }
+    logWechatRect(tag, extra) {
+      var _a;
+      try {
+        const listNode = (_a = this.list_items) == null ? void 0 : _a.rootNode;
+        console.log("[UISocialInviteView][" + tag + "]", JSON.stringify({
+          activeTab: this.activeTab,
+          listNode: listNode ? {
+            x: listNode.x,
+            y: listNode.y,
+            width: listNode.width,
+            height: listNode.height
+          } : null,
+          box_openData: this.box_openData ? {
+            x: this.box_openData.x,
+            y: this.box_openData.y,
+            width: this.box_openData.width,
+            height: this.box_openData.height,
+            scaleX: this.box_openData.scaleX,
+            scaleY: this.box_openData.scaleY
+          } : null,
+          wechat_panel: this.wechat_panel ? {
+            x: this.wechat_panel.x,
+            y: this.wechat_panel.y,
+            width: this.wechat_panel.width,
+            height: this.wechat_panel.height,
+            scaleX: this.wechat_panel.scaleX,
+            scaleY: this.wechat_panel.scaleY
+          } : null,
+          extra
+        }));
+      } catch (err) {
+        console.log("[UISocialInviteView][" + tag + "]", extra);
+      }
+    }
   };
   var InviteItemCtrl = class extends ListItemCtrl {
     constructor() {
@@ -48346,11 +48396,20 @@ ${stack}
       }
       const friendInfo = data.friendInfo;
       if ((_b = friendInfo == null ? void 0 : friendInfo.attention) == null ? void 0 : _b.remarks) {
-        this.userName.update(`${friendInfo.info.nick}(${friendInfo.attention.remarks})`, friendInfo.info.is_subscribe);
+        this.userName.update(
+          `${friendInfo.info.nick}(${friendInfo.attention.remarks})`,
+          friendInfo.info.is_subscribe
+        );
       } else {
-        this.userName.update(`${((_c = friendInfo == null ? void 0 : friendInfo.info) == null ? void 0 : _c.nick) || ""}`, (_d = friendInfo == null ? void 0 : friendInfo.info) == null ? void 0 : _d.is_subscribe);
+        this.userName.update(
+          `${((_c = friendInfo == null ? void 0 : friendInfo.info) == null ? void 0 : _c.nick) || ""}`,
+          (_d = friendInfo == null ? void 0 : friendInfo.info) == null ? void 0 : _d.is_subscribe
+        );
       }
-      this.userStatus.update(((_e = friendInfo == null ? void 0 : friendInfo.attention) == null ? void 0 : _e.status) || 0, ((_f = friendInfo == null ? void 0 : friendInfo.attention) == null ? void 0 : _f.last_out_time) || 0);
+      this.userStatus.update(
+        ((_e = friendInfo == null ? void 0 : friendInfo.attention) == null ? void 0 : _e.status) || 0,
+        ((_f = friendInfo == null ? void 0 : friendInfo.attention) == null ? void 0 : _f.last_out_time) || 0
+      );
       if (this.txt_level) {
         this.txt_level.text = "学徒3级";
       }
@@ -48361,7 +48420,11 @@ ${stack}
         UIUtils.setActive(this.levelNode, true);
         UIUtils.setActive(this.userStatusNode, true);
       }
-      this.headItem.update((_g = friendInfo == null ? void 0 : friendInfo.info) == null ? void 0 : _g.head_icon, (_h = friendInfo == null ? void 0 : friendInfo.info) == null ? void 0 : _h.head_frame, (_i = friendInfo == null ? void 0 : friendInfo.info) == null ? void 0 : _i.sex);
+      this.headItem.update(
+        (_g = friendInfo == null ? void 0 : friendInfo.info) == null ? void 0 : _g.head_icon,
+        (_h = friendInfo == null ? void 0 : friendInfo.info) == null ? void 0 : _h.head_frame,
+        (_i = friendInfo == null ? void 0 : friendInfo.info) == null ? void 0 : _i.sex
+      );
       this.refreshInviteState();
     }
     onClickInvite() {
@@ -108745,6 +108808,7 @@ ${weixin_number}`,
       this.curSelectedType = 0;
       this.curSelectedDisplay = null;
       this._curStepCfg = null;
+      this._guideCurStep = 0;
       /**
        * 手指引导
        */
@@ -108758,13 +108822,17 @@ ${weixin_number}`,
        */
       this._guide_square_arr = [];
       /**
-          * 3D虚线引导
-          */
+      * 3D虚线引导
+      */
       this._guide_line3d_arr = [];
       /**
        * 箭头引导
        */
       this._guide_arrow_arr = [];
+      /**
+       * 星星引导
+       */
+      this._guide_star_arr = [];
       /**
        * 点引导
        */
@@ -108773,6 +108841,10 @@ ${weixin_number}`,
        * 文本引导
        */
       this._guide_txt_arr = [];
+      /** 手指引导时是否允许点击空白处进入下一步 */
+      this._fingerTapToNextEnabled = false;
+      /** 选中棋子后临时隐藏手指引导 */
+      this._fingerGuidesHiddenBySelect = false;
     }
     get layer() {
       return 1 /* HighBase */;
@@ -108795,24 +108867,18 @@ ${weixin_number}`,
       this._guide_textFrame = new GuideTypeTxtFrame();
       this._guide_textFrame.setComponents(this.elems.getElement("guide_textFrame"));
       UIUtils.setActive(this.elems.getElement("guide_finger"), false);
-      UIUtils.setActive(this.elems.getElement("guide_box"), false);
       UIUtils.setActive(this.elems.getElement("guide_arrow"), false);
       UIUtils.setActive(this.elems.getElement("guide_point"), false);
       UIUtils.setActive(this.elems.getElement("guide_text"), false);
+      UIUtils.setActive(this.elems.getElement("img_star"), false);
       this.op_practice = this.elems.getElement("op_practice");
       this.op_learn = this.elems.getElement("op_learn");
-      this.btn_auto = this.elems.getElement("btn_auto");
-      this.addClickListener(this.btn_auto, this.onClickSwitchAuto);
-      this.btn_switchAuto = this.elems.getElement("btn_switchAuto");
-      this.addClickListener(this.btn_switchAuto, this.onClickSwitchAuto);
       this.btn_next = this.elems.getElement("btn_next");
       this.btn_pre = this.elems.getElement("btn_pre");
-      this.btn_goto = this.elems.getUIButton("btn_goto");
       this.btn_reset = this.elems.getElement("btn_reset");
       this.btn_undo = this.elems.getElement("btn_undo");
       this.addClickListener(this.btn_pre, this.onClickPre);
       this.addClickListener(this.btn_next, this.onClickNext);
-      this.addClickListener(this.btn_goto.rootNode, this.onClickNext);
       this.addClickListener(this.btn_reset, this.onClickReset);
       this.addClickListener(this.btn_undo, this.onClickUndo);
     }
@@ -108827,9 +108893,11 @@ ${weixin_number}`,
       this.list_type.selected = 0;
       this.curSelectedDisplay = null;
       this.view.mouseThrough = true;
-      UIUtils.setNodeCtrlStatus(this.op_learn, SetUpData.ins().manualLearn ? 0 : 1);
+      Laya.stage.on(Laya.Event.CLICK, this, this.onStageClickForFingerGuide);
     }
     onClose() {
+      Laya.stage.off(Laya.Event.CLICK, this, this.onStageClickForFingerGuide);
+      this._fingerTapToNextEnabled = false;
       this._guide_textFrame.onDestroy();
       this._guide_finger_arr.forEach((item2) => {
         item2.setActive(false);
@@ -108843,8 +108911,13 @@ ${weixin_number}`,
         item2.setActive(false);
         item2.onDestroy();
       });
+      this._guide_square_arr = [];
       this._guide_arrow_arr.forEach((item2) => {
         item2.setActive(false);
+        item2.onDestroy();
+      });
+      this._guide_star_arr.forEach((item2) => {
+        item2.setActive(false, true);
         item2.onDestroy();
       });
       this._guide_point_arr.forEach((item2) => {
@@ -108901,13 +108974,48 @@ ${weixin_number}`,
      * 点击上一步
      */
     onClickPre() {
+      if (this._guideCurStep <= 0 || this.isBoardBusy()) {
+        return;
+      }
       this._app.preStep();
+    }
+    /**
+     * btn_next controller: 0=下一步, 1=下一课（完成当前 display）
+     */
+    isBtnNextGotoMode() {
+      var _a;
+      return ((_a = this.btn_next.getController("c1")) == null ? void 0 : _a.selectedIndex) === 1;
+    }
+    /** 上下步类型（显示 op_learn） */
+    isStepNavGuideType(guideType) {
+      return guideType === 1 /* Normal */ || guideType === 4 /* AutoMovePieceTo */;
+    }
+    /** 走棋类型（需玩家落子） */
+    isMovePieceGuideType(guideType) {
+      return guideType === 3 /* MovePieceTo */ || guideType === 6 /* Mate */ || guideType === 5 /* MovePieceToWithQiPu */;
+    }
+    /**
+     * 上一步为走棋、当前为上下步时隐藏上一步按钮，避免回退到走棋步骤
+     */
+    updatePreButtonVisible(data, curStep) {
+      var _a, _b;
+      let visible = true;
+      if (this.isStepNavGuideType(data.guide_type) && curStep > 0) {
+        const prevStep = (_b = (_a = this._app) == null ? void 0 : _a.curSteps) == null ? void 0 : _b[curStep - 1];
+        if (prevStep && this.isMovePieceGuideType(prevStep.guide_type)) {
+          visible = false;
+        }
+      }
+      UIUtils.setActive(this.btn_pre, visible);
     }
     /**
      * 点击下一步
      */
     onClickNext() {
-      if (this.btn_goto.visible) {
+      if (this.isBoardBusy()) {
+        return;
+      }
+      if (this.isBtnNextGotoMode()) {
         this._app.onStepFinished(false);
         UIManager.ins().openForm(UILearnFinishView, this.curSelectedDisplay);
       } else {
@@ -108918,39 +109026,50 @@ ${weixin_number}`,
      * 点击重置
      */
     onClickReset() {
-      if (ChineseChessGame.instance.board.isMoving) {
+      var _a;
+      if (this.isBoardBusy() || !((_a = ChineseChessGame.instance) == null ? void 0 : _a.canUndoMove())) {
         return;
       }
       ChineseChessGame.instance.board.reset();
+      Laya.timer.frameOnce(1, this, this.updateOpButtonState);
     }
     /**
      * 点击撤销
      */
     onClickUndo() {
-      if (ChineseChessGame.instance.board.isMoving) {
+      var _a;
+      if (this.isBoardBusy() || !((_a = ChineseChessGame.instance) == null ? void 0 : _a.canUndoMove())) {
         return;
       }
       ChineseChessGame.instance.undoMove();
-    }
-    /**
-     * 点击切换自动学习
-     */
-    onClickSwitchAuto() {
-      SetUpData.ins().manualLearn = !SetUpData.ins().manualLearn;
-      UIUtils.setNodeCtrlStatus(this.op_learn, SetUpData.ins().manualLearn ? 0 : 1);
-      this.checkAutoLearn();
-    }
-    /**
-     * 检查是否自动学习
-     */
-    checkAutoLearn() {
-      if (!SetUpData.ins().manualLearn && this.op_learn.visible && this._curStepCfg.autoplay_time > 0) {
-        this.addOnceTimer(this._curStepCfg.autoplay_time * 1e3, this.onClickNext);
-      } else {
-        this.removeTimer(this.onClickNext);
-      }
+      Laya.timer.frameOnce(1, this, this.updateOpButtonState);
     }
     changePlayerTurn(isSelfTurn) {
+      this.updateOpButtonState();
+    }
+    /**
+     * 刷新操作按钮置灰状态（不可点击时置灰，移动动画中不置灰避免闪烁）
+     */
+    updateOpButtonState() {
+      var _a;
+      if (!this._app) {
+        return;
+      }
+      if (this.btn_pre.visible) {
+        this.btn_pre.grayed = this._guideCurStep <= 0;
+      }
+      if (this.btn_next.visible) {
+        this.btn_next.grayed = false;
+      }
+      if (this.op_practice.visible) {
+        const canUndo = !!((_a = ChineseChessGame.instance) == null ? void 0 : _a.canUndoMove());
+        this.btn_undo.grayed = !canUndo;
+        this.btn_reset.grayed = !canUndo;
+      }
+    }
+    isBoardBusy() {
+      var _a, _b, _c;
+      return (_c = (_b = (_a = ChineseChessGame.instance) == null ? void 0 : _a.board) == null ? void 0 : _b.isMoving) != null ? _c : false;
     }
     updateScore() {
     }
@@ -109020,65 +109139,20 @@ ${weixin_number}`,
      */
     updateGuideStep(display, isFinalDisplay, data, curStep, totalStep) {
       this._curStepCfg = data;
+      this._guideCurStep = curStep;
+      this._fingerGuidesHiddenBySelect = false;
       if (data.txt_language) {
         this._guide_textFrame.setActive(true);
         this._guide_textFrame.update(data);
       } else {
         this._guide_textFrame.setActive(false);
       }
-      if (data.finger_xy) {
-        if (this._guide_finger_arr.length < data.finger_xy.length) {
-          for (let i = this._guide_finger_arr.length; i < data.finger_xy.length; i++) {
-            const node = UIUtils.instantiateUINode(this.elems.getElement("guide_finger"));
-            this.view.addChild(node);
-            const finger = new GuideTypeFinger();
-            finger.setComponents(node);
-            this._guide_finger_arr.push(finger);
-          }
-        }
-        this._guide_finger_arr.forEach((item2, index) => {
-          if (index >= data.finger_xy.length) {
-            item2.setActive(false);
-            return;
-          }
-          item2.setActive(true);
-          item2.update(data.finger_xy[index]);
-        });
-      } else {
-        this._guide_finger_arr.forEach((item2) => {
-          item2.setActive(false);
-        });
-      }
-      if (data.finger_xy2) {
-        if (this._guide_finger2_arr.length < data.finger_xy2.length) {
-          for (let i = this._guide_finger2_arr.length; i < data.finger_xy2.length; i++) {
-            const node = UIUtils.instantiateUINode(this.elems.getElement("guide_finger"));
-            this.view.addChild(node);
-            const finger2 = new GuideTypeFinger2();
-            finger2.setComponents(node);
-            this._guide_finger2_arr.push(finger2);
-          }
-        }
-        this._guide_finger2_arr.forEach((item2, index) => {
-          if (index >= data.finger_xy2.length) {
-            item2.setActive(false);
-            return;
-          }
-          item2.setActive(true);
-          item2.update(data.finger_xy2[index]);
-        });
-      } else {
-        this._guide_finger2_arr.forEach((item2) => {
-          item2.setActive(false);
-        });
-      }
+      this._updateFingerGuides(data);
       if (data.position_box_xy) {
         if (this._guide_square_arr.length < data.position_box_xy.length) {
+          const parent = ChineseChessGame.instance.board.render.owner.parent;
           for (let i = this._guide_square_arr.length; i < data.position_box_xy.length; i++) {
-            const node = UIUtils.instantiateUINode(this.elems.getElement("guide_box"));
-            this.view.addChild(node);
-            const square = new GuideTypeBoxFrame();
-            square.setComponents(node);
+            const square = new GuideTypeBoxFrame(parent);
             this._guide_square_arr.push(square);
           }
         }
@@ -109141,6 +109215,7 @@ ${weixin_number}`,
           item2.setActive(false);
         });
       }
+      this._refreshGuideStars(data);
       if (data.point_xy) {
         if (this._guide_point_arr.length < data.point_xy.length) {
           for (let i = this._guide_point_arr.length; i < data.point_xy.length; i++) {
@@ -109203,24 +109278,231 @@ ${weixin_number}`,
           UIUtils.setActive(this.op_practice, false);
           break;
       }
-      this.btn_pre.grayed = curStep <= 0;
       if (curStep == totalStep - 1 && isFinalDisplay) {
-        UIUtils.setActive(this.btn_goto.rootNode, true);
-        UIUtils.setActive(this.btn_next, false);
-        if (display.display_type == 1) {
-          this.btn_goto.setTitle("完成学习");
-        } else {
-          this.btn_goto.setTitle("完成习题");
-        }
+        UIUtils.setNodeCtrlStatus(this.btn_next, 1);
       } else {
-        UIUtils.setActive(this.btn_goto.rootNode, false);
-        UIUtils.setActive(this.btn_next, true);
+        UIUtils.setNodeCtrlStatus(this.btn_next, 0);
       }
+      this.updatePreButtonVisible(data, curStep);
       const hisStep = LearnData.ins().getDisplayStep(display.id);
       const isReview = curStep + 1 <= hisStep;
       this.txt_learnType.text = isReview ? "复习中" : "学习中";
       this.txt_progress.text = `${Math.floor((curStep + 1) * 100 / totalStep)}%`;
-      this.checkAutoLearn();
+      this._updateFingerTapToNextEnabled(data, totalStep);
+      Laya.timer.frameOnce(1, this, this.updateOpButtonState);
+    }
+    /**
+     * 刷新星星引导：可见星星切换前先播放消失动画
+     */
+    _refreshGuideStars(data) {
+      if (data.xingx && data.xingx.length > 0) {
+        if (this._guide_star_arr.length < data.xingx.length) {
+          for (let i = this._guide_star_arr.length; i < data.xingx.length; i++) {
+            const node = UIUtils.instantiateUINode(this.elems.getElement("img_star"));
+            this.view.addChild(node);
+            const star = new GuideTypeStar();
+            star.setComponents(node);
+            this._guide_star_arr.push(star);
+          }
+        }
+        this._guide_star_arr.forEach((item2, index) => {
+          if (index >= data.xingx.length) {
+            item2.setActive(false);
+            return;
+          }
+          if (item2.isDisappearing()) {
+            return;
+          }
+          const nextData = data.xingx[index];
+          if (item2.isShowing()) {
+            if (item2.matchesConfig(nextData)) {
+              return;
+            }
+            item2.playCaptureDisappearThen(() => {
+              item2.setActive(true);
+              item2.update(nextData);
+            });
+            return;
+          }
+          item2.setActive(true);
+          item2.update(nextData);
+        });
+        return;
+      }
+      this._guide_star_arr.forEach((item2) => {
+        item2.setActive(false);
+      });
+    }
+    /**
+     * 引导星星所在位置被吃子时，播放消失动画
+     * @returns 是否触发了消失动画
+     */
+    onGuideStarCaptured(boardX, boardY) {
+      var _a, _b, _c;
+      if (!((_b = (_a = this._curStepCfg) == null ? void 0 : _a.xingx) == null ? void 0 : _b.length)) {
+        return false;
+      }
+      let played = false;
+      for (let i = 0; i < this._curStepCfg.xingx.length; i++) {
+        const star = this._guide_star_arr[i];
+        if (!(star == null ? void 0 : star.isShowing())) {
+          continue;
+        }
+        const pos = this._curStepCfg.xingx[i];
+        const arrow = (_c = this._curStepCfg.arrow_xy) == null ? void 0 : _c[i];
+        const matched = this._matchGuideBoardPos(pos.x, pos.y, boardX, boardY) || !!arrow && this._matchGuideBoardPos(arrow.x1, arrow.y1, boardX, boardY);
+        if (matched && star.playCaptureDisappear()) {
+          played = true;
+        }
+      }
+      if (!played) {
+        for (let i = 0; i < this._curStepCfg.xingx.length; i++) {
+          const star = this._guide_star_arr[i];
+          if ((star == null ? void 0 : star.isShowing()) && star.playCaptureDisappear()) {
+            played = true;
+          }
+        }
+      }
+      return played;
+    }
+    /**
+     * 等待星星消失动画结束后再执行回调
+     */
+    waitGuideStarDisappearThen(callback) {
+      const wait = () => {
+        if (this._guide_star_arr.some((star) => star.isDisappearing())) {
+          Laya.timer.frameOnce(1, this, wait);
+          return;
+        }
+        callback();
+      };
+      wait();
+    }
+    _matchGuideBoardPos(configX, configY, boardX, boardY) {
+      const targetX = Math.round(boardX);
+      const targetY = Math.round(boardY);
+      const configBoardY = Math.round(9 - configY);
+      if (Math.round(configX) === targetX && configBoardY === targetY) {
+        return true;
+      }
+      return Math.round(configX) === targetX && Math.round(configY) === targetY;
+    }
+    /**
+     * 选中棋子后隐藏手指引导（取消选中不恢复）
+     */
+    onPieceSelected() {
+      this._fingerGuidesHiddenBySelect = true;
+      this._hideAllFingerGuides();
+    }
+    _hideAllFingerGuides() {
+      this._guide_finger_arr.forEach((item2) => {
+        item2.setActive(false);
+      });
+      this._guide_finger2_arr.forEach((item2) => {
+        item2.setActive(false);
+      });
+      this._fingerTapToNextEnabled = false;
+    }
+    _updateFingerGuides(data) {
+      if (this._fingerGuidesHiddenBySelect) {
+        this._hideAllFingerGuides();
+        return;
+      }
+      if (data.finger_xy) {
+        if (this._guide_finger_arr.length < data.finger_xy.length) {
+          for (let i = this._guide_finger_arr.length; i < data.finger_xy.length; i++) {
+            const node = UIUtils.instantiateUINode(this.elems.getElement("guide_finger"));
+            this.view.addChild(node);
+            const finger = new GuideTypeFinger();
+            finger.setComponents(node);
+            this._guide_finger_arr.push(finger);
+          }
+        }
+        this._guide_finger_arr.forEach((item2, index) => {
+          if (index >= data.finger_xy.length) {
+            item2.setActive(false);
+            return;
+          }
+          item2.setActive(true);
+          item2.update(data.finger_xy[index]);
+        });
+      } else {
+        this._guide_finger_arr.forEach((item2) => {
+          item2.setActive(false);
+        });
+      }
+      if (data.finger_xy2) {
+        if (this._guide_finger2_arr.length < data.finger_xy2.length) {
+          for (let i = this._guide_finger2_arr.length; i < data.finger_xy2.length; i++) {
+            const node = UIUtils.instantiateUINode(this.elems.getElement("guide_finger"));
+            this.view.addChild(node);
+            const finger2 = new GuideTypeFinger2();
+            finger2.setComponents(node);
+            this._guide_finger2_arr.push(finger2);
+          }
+        }
+        this._guide_finger2_arr.forEach((item2, index) => {
+          if (index >= data.finger_xy2.length) {
+            item2.setActive(false);
+            return;
+          }
+          item2.setActive(true);
+          item2.update(data.finger_xy2[index]);
+        });
+      } else {
+        this._guide_finger2_arr.forEach((item2) => {
+          item2.setActive(false);
+        });
+      }
+    }
+    /**
+     * 手指引导存在且有多步时，允许点击空白处进入下一步
+     */
+    _updateFingerTapToNextEnabled(data, totalStep) {
+      var _a, _b;
+      const hasFinger = ((_a = data.finger_xy) == null ? void 0 : _a.length) > 0 || ((_b = data.finger_xy2) == null ? void 0 : _b.length) > 0;
+      const hasStepNav = totalStep > 1;
+      const hasNext = this.btn_next.visible;
+      const isPassiveLearn = data.guide_type === 1 /* Normal */ || data.guide_type === 4 /* AutoMovePieceTo */;
+      this._fingerTapToNextEnabled = hasFinger && hasStepNav && hasNext && isPassiveLearn && !this.isBoardBusy();
+    }
+    onStageClickForFingerGuide(e) {
+      var _a;
+      if (!this._fingerTapToNextEnabled || !((_a = this.view) == null ? void 0 : _a.activeInHierarchy)) {
+        return;
+      }
+      if (this._isFingerTapToNextBlocked(e.target)) {
+        return;
+      }
+      this.onClickNext();
+    }
+    /**
+     * 判断是否点击在需要保留原逻辑的交互区域上
+     */
+    _isFingerTapToNextBlocked(target) {
+      var _a, _b, _c;
+      const blockRoots = [
+        this.btn_close,
+        this.btn_pre,
+        this.btn_next,
+        this.btn_reset,
+        this.btn_undo,
+        (_a = this.list_type) == null ? void 0 : _a.rootNode,
+        (_b = this.list_display) == null ? void 0 : _b.rootNode,
+        this.op_learn,
+        this.op_practice
+      ];
+      let node = target;
+      while (node) {
+        if (blockRoots.indexOf(node) >= 0) {
+          return true;
+        }
+        if ((_c = node.getComponent) == null ? void 0 : _c.call(node, UIClickListener)) {
+          return true;
+        }
+        node = node.parent;
+      }
+      return false;
     }
     /**
      * 处理学习课程变化事件
@@ -109255,16 +109537,28 @@ ${weixin_number}`,
       this.img_gou.visible = isFinished;
     }
   };
-  var GuideTypeTxtFrame = class {
+  var _GuideTypeTxtFrame = class _GuideTypeTxtFrame {
+    constructor() {
+      this._defaultScaleX = 1;
+      this._defaultScaleY = 1;
+      this._animToken = 0;
+      this._fullText = "";
+      this._typewriterSteps = [];
+    }
     setComponents(node) {
       node.zOrder = 1e3;
       this.root = node;
       this.txt_content = ElemFinder.getElement(node, "txt_content");
-      this.defualtWidth = this.txt_content.width;
+      this.defualtWidth = this.root.width;
+      this.defualtHeight = this.root.height;
+      this.defaultTxtHeight = this.txt_content.height;
+      this._defaultScaleX = this.root.scaleX;
+      this._defaultScaleY = this.root.scaleY;
       this.follower = node.addComponent(Sprite3DFollower);
       this.follower.enabled = false;
     }
     onDestroy() {
+      this._stopAnimations();
       this.follower.enabled = false;
       this.follower.clearFollow();
     }
@@ -109273,10 +109567,7 @@ ${weixin_number}`,
       if (!this.follower.camera) {
         this.follower.camera = ChineseChessGame.instance.board.render.camera;
       }
-      this.root.width = this.txt_content.width = this.defualtWidth + data.txt_box_xy.x1;
-      this.txt_content.text = data.txt_language;
-      this.txt_content.height = Math.min(142, this.txt_content.textHeight);
-      this.root.height = this.txt_content.height;
+      this.root.width = this.defualtWidth + data.txt_box_xy.x1;
       if (data.txt_box_xy.v1 == 1) {
         UIUtils.setNodeCtrlStatus(this.root, 0);
       } else {
@@ -109285,16 +109576,189 @@ ${weixin_number}`,
       const worldPos = ChessPositionConverter.generatePosition(data.txt_box_xy.x, 9 - data.txt_box_xy.y);
       this.follower.setTargetPos(worldPos);
       this.follower.enabled = true;
+      this._playContent(data.txt_language, data.txt_box_xy.v1 == 1);
     }
     updateText(str) {
-      this.txt_content.text = StringUtils.format(this.data.txt_language, str);
-      this.txt_content.height = Math.min(142, this.txt_content.textHeight);
-      this.root.height = this.txt_content.height;
+      this._playContent(StringUtils.format(this.data.txt_language, str), this.data.txt_box_xy.v1 == 1);
+    }
+    _playContent(text, slideFromLeft) {
+      this._stopAnimations();
+      this._fullText = text != null ? text : "";
+      this.txt_content.text = this._fullText;
+      this._layoutTextContent();
+      const lockedRootHeight = this.root.height;
+      const lockedTxtHeight = this.txt_content.height;
+      const lockedTxtY = this.txt_content.y;
+      this.txt_content.text = "";
+      this.root.height = lockedRootHeight;
+      this.txt_content.height = lockedTxtHeight;
+      this.txt_content.y = lockedTxtY;
+      const startOffsetX = slideFromLeft ? -_GuideTypeTxtFrame.ENTRANCE_OFFSET_X : _GuideTypeTxtFrame.ENTRANCE_OFFSET_X;
+      this.root.alpha = 0;
+      this.root.scaleX = this._defaultScaleX * 0.86;
+      this.root.scaleY = this._defaultScaleY * 0.86;
+      this.follower.uiOffsetX = startOffsetX;
+      const token = ++this._animToken;
+      Laya.Tween.to(
+        this.root,
+        { alpha: 1, scaleX: this._defaultScaleX, scaleY: this._defaultScaleY },
+        _GuideTypeTxtFrame.ENTRANCE_DURATION_MS,
+        Laya.Ease.backOut
+      );
+      Laya.Tween.to(
+        this.follower,
+        { uiOffsetX: 0 },
+        _GuideTypeTxtFrame.ENTRANCE_DURATION_MS,
+        Laya.Ease.backOut
+      );
+      Laya.timer.once(_GuideTypeTxtFrame.TYPEWRITER_START_DELAY_MS, this, () => {
+        if (token !== this._animToken) {
+          return;
+        }
+        this._startTypewriter(token, lockedRootHeight, lockedTxtHeight, lockedTxtY);
+      });
+    }
+    _startTypewriter(token, lockedRootHeight, lockedTxtHeight, lockedTxtY) {
+      this._typewriterSteps = _GuideTypeTxtFrame._buildHtmlRevealSteps(this._fullText);
+      const totalLen = this._typewriterSteps.length;
+      if (totalLen <= 0) {
+        return;
+      }
+      let index = 0;
+      const totalMs = Math.min(
+        _GuideTypeTxtFrame.TYPEWRITER_MAX_TOTAL_MS,
+        Math.max(_GuideTypeTxtFrame.TYPEWRITER_MIN_TOTAL_MS, totalLen * _GuideTypeTxtFrame.TYPEWRITER_MS_PER_CHAR)
+      );
+      const interval = totalMs / totalLen;
+      this._typewriterTick = () => {
+        if (token !== this._animToken) {
+          return;
+        }
+        index++;
+        this.txt_content.text = this._typewriterSteps[index - 1];
+        this.root.height = lockedRootHeight;
+        this.txt_content.height = lockedTxtHeight;
+        this.txt_content.y = lockedTxtY;
+        if (index >= totalLen) {
+          Laya.timer.clear(this, this._typewriterTick);
+          this._typewriterTick = null;
+          this.txt_content.text = this._fullText;
+          this._layoutTextContent();
+        }
+      };
+      Laya.timer.loop(interval, this, this._typewriterTick);
+      this._typewriterTick();
+    }
+    /**
+     * 按可见字符生成富文本逐字步骤，保证每一步都是合法 html
+     */
+    static _buildHtmlRevealSteps(html) {
+      if (!html) {
+        return [];
+      }
+      if (html.indexOf("<") < 0) {
+        const plainSteps = [];
+        for (let i2 = 1; i2 <= html.length; i2++) {
+          plainSteps.push(html.substring(0, i2));
+        }
+        return plainSteps;
+      }
+      const steps = [];
+      const openTags = [];
+      let buffer = "";
+      let i = 0;
+      while (i < html.length) {
+        if (html[i] === "<") {
+          const end = html.indexOf(">", i);
+          if (end < 0) {
+            buffer += html.substring(i);
+            break;
+          }
+          const tag = html.substring(i, end + 1);
+          buffer += tag;
+          _GuideTypeTxtFrame._updateHtmlTagStack(tag, openTags);
+          i = end + 1;
+          continue;
+        }
+        if (html[i] === "&") {
+          const semi = html.indexOf(";", i);
+          if (semi > i && semi - i < 12) {
+            buffer += html.substring(i, semi + 1);
+            steps.push(buffer + _GuideTypeTxtFrame._buildAutoCloseTags(openTags));
+            i = semi + 1;
+            continue;
+          }
+        }
+        buffer += html[i];
+        steps.push(buffer + _GuideTypeTxtFrame._buildAutoCloseTags(openTags));
+        i++;
+      }
+      return steps;
+    }
+    static _updateHtmlTagStack(tag, openTags) {
+      const matched = tag.match(/^<\/?([a-zA-Z][\w-]*)/);
+      if (!matched) {
+        return;
+      }
+      const tagName = matched[1].toLowerCase();
+      if (tag.startsWith("</")) {
+        const idx = openTags.lastIndexOf(tagName);
+        if (idx >= 0) {
+          openTags.splice(idx, 1);
+        }
+        return;
+      }
+      if (tag.endsWith("/>") || tagName === "br" || tagName === "img") {
+        return;
+      }
+      openTags.push(tagName);
+    }
+    static _buildAutoCloseTags(openTags) {
+      let result = "";
+      for (let i = openTags.length - 1; i >= 0; i--) {
+        result += `</${openTags[i]}>`;
+      }
+      return result;
+    }
+    _stopAnimations() {
+      this._animToken++;
+      Laya.Tween.killAll(this.root);
+      Laya.Tween.killAll(this.follower);
+      if (this._typewriterTick) {
+        Laya.timer.clear(this, this._typewriterTick);
+        this._typewriterTick = null;
+      }
+      Laya.timer.clearAll(this);
+      this.follower.uiOffsetX = 0;
+      this.root.alpha = 1;
+      this.root.scaleX = this._defaultScaleX;
+      this.root.scaleY = this._defaultScaleY;
+    }
+    /**
+     * 文本按内容自动高度（不低于初始高度），框高随文本增量变高，并在框内上下居中
+     */
+    _layoutTextContent() {
+      const rawTextHeight = Math.ceil(this.txt_content.textHeight);
+      const heightDelta = Math.max(0, rawTextHeight - this.defaultTxtHeight);
+      const baseTxtY = (this.defualtHeight - this.defaultTxtHeight) / 2;
+      this.txt_content.height = rawTextHeight;
+      this.root.height = this.defualtHeight + heightDelta;
+      this.txt_content.y = baseTxtY + Math.max(0, (this.defaultTxtHeight - rawTextHeight) / 2);
     }
     setActive(active) {
+      if (!active) {
+        this._stopAnimations();
+      }
       UIUtils.setActive(this.root, active);
     }
   };
+  _GuideTypeTxtFrame.ENTRANCE_OFFSET_X = 140;
+  _GuideTypeTxtFrame.ENTRANCE_DURATION_MS = 520;
+  _GuideTypeTxtFrame.TYPEWRITER_START_DELAY_MS = 160;
+  _GuideTypeTxtFrame.TYPEWRITER_MIN_TOTAL_MS = 350;
+  _GuideTypeTxtFrame.TYPEWRITER_MAX_TOTAL_MS = 1600;
+  _GuideTypeTxtFrame.TYPEWRITER_MS_PER_CHAR = 29;
+  var GuideTypeTxtFrame = _GuideTypeTxtFrame;
   var GuideTypeFinger = class {
     setComponents(node) {
       this.root = node;
@@ -109368,42 +109832,125 @@ ${weixin_number}`,
       UIUtils.setActive(this.root, active);
     }
   };
-  var GuideTypeBoxFrame = class {
-    setComponents(node) {
-      node.zOrder = -100;
-      this.root = node;
-      this.follower = Sprite3DFollower.addToNode(node);
-      this.follower.enabled = false;
+  var _GuideTypeBoxFrame = class _GuideTypeBoxFrame {
+    constructor(parent) {
+      /** quad 网格在 XY 平面上的原始宽高（scale=1 时） */
+      this._quadWidth = 1;
+      this._quadHeight = 1;
+      this._alphaValue = 1;
+      this._pendingData = null;
+      this._breathPlaying = false;
+      this._renderer = new Sprite3DRenderer(parent);
+      this._renderer.load(_GuideTypeBoxFrame.PREFAB_PATH, this._onModelLoaded.bind(this));
+    }
+    get alphaProxy() {
+      return this._alphaValue;
+    }
+    set alphaProxy(value) {
+      this._alphaValue = value;
+      this._setMaterialAlpha(value);
+    }
+    _onModelLoaded() {
+      const model = this._renderer.model;
+      if (!model) {
+        return;
+      }
+      this._renderNode = model.getChildByName("render");
+      if (!this._renderNode) {
+        return;
+      }
+      this._initQuadSize(this._renderNode);
+      const meshRenderer = this._renderNode.getComponent(Laya.MeshRenderer);
+      if (meshRenderer == null ? void 0 : meshRenderer.sharedMaterial) {
+        this._material = meshRenderer.material;
+      }
+      if (this._pendingData) {
+        const data = this._pendingData;
+        this._pendingData = null;
+        this._applyUpdate(data);
+      } else if (this._breathPlaying) {
+        this._startTween();
+      }
+    }
+    _initQuadSize(renderNode) {
+      const meshFilter = renderNode.getComponent(Laya.MeshFilter);
+      const mesh = meshFilter == null ? void 0 : meshFilter.sharedMesh;
+      if (!(mesh == null ? void 0 : mesh.bounds)) {
+        return;
+      }
+      const extent = mesh.bounds.getExtent();
+      this._quadWidth = Math.max(Math.abs(extent.x) * 2, 1e-4);
+      this._quadHeight = Math.max(Math.abs(extent.y) * 2, 1e-4);
     }
     onDestroy() {
-      this.follower.enabled = false;
-      this.follower.clearFollow();
-      Laya.Tween.killAll(this.root);
+      var _a;
+      this._stopAlphaTween();
+      this._breathPlaying = false;
+      (_a = this._renderer) == null ? void 0 : _a.destroyModel();
+      this._renderer = null;
+      this._renderNode = null;
     }
     update(data) {
-      if (!this.follower.camera) {
-        this.follower.camera = ChineseChessGame.instance.board.render.camera;
+      if (!this._renderer.loaded) {
+        this._pendingData = data;
+        return;
       }
-      this.follower.enabled = true;
-      const worldPos = ChessPositionConverter.generatePosition(data.x, 9 - data.y);
-      this.follower.setTargetPos(worldPos);
-      const worldPos2 = ChessPositionConverter.generatePosition(data.x1, 9 - data.y1);
-      const pos = UIUtils.convertThreeD2TwoD(this.follower.camera, worldPos2, this.root, MathUtil.tempVector2_1);
-      this.root.width = Math.abs(pos.x - this.root.x);
-      this.root.height = Math.abs(pos.y - this.root.y);
-      Laya.Tween.killAll(this.root);
+      this._applyUpdate(data);
+    }
+    _applyUpdate(data) {
+      const startPos = ChessPositionConverter.generatePosition(data.x, 9 - data.y);
+      const endPos = ChessPositionConverter.generatePosition(data.x1, 9 - data.y1);
+      const cellSize = ChessPositionConverter.cellSize;
+      const zCellSize = cellSize * ChessPositionConverter.yAxisScale;
+      const sizeX = Math.max(Math.abs(endPos.x - startPos.x), cellSize);
+      const sizeZ = Math.max(Math.abs(endPos.z - startPos.z), zCellSize);
+      const centerPos = MathUtil.tempVector3;
+      Laya.Vector3.add(startPos, endPos, centerPos);
+      Laya.Vector3.scale(centerPos, 0.5, centerPos);
+      this._renderer.setPosition(centerPos);
+      this._renderNode.transform.localScale = new Laya.Vector3(
+        sizeX / this._quadWidth,
+        sizeZ / this._quadHeight,
+        1
+      );
       this._startTween();
     }
     _startTween() {
-      this.root.alpha = 1;
-      Laya.Tween.create(this.root).to("alpha", 0.5).duration(1500).then(() => {
-        Laya.Tween.create(this.root).to("alpha", 1).duration(1500).then(this._startTween, this);
+      if (!this._material) {
+        this._breathPlaying = true;
+        return;
+      }
+      this._breathPlaying = true;
+      this._stopAlphaTween();
+      this.alphaProxy = 1;
+      Laya.Tween.create(this).delay(_GuideTypeBoxFrame.ALPHA_HOLD_MS).to("alphaProxy", 0).duration(800).then(() => {
+        Laya.Tween.create(this).to("alphaProxy", 1).duration(600).then(this._startTween, this);
       }, this);
     }
+    _setMaterialAlpha(alpha) {
+      if (!this._material) {
+        return;
+      }
+      this._material.setColor("u_AlbedoColor", new Laya.Color(1, 1, 1, alpha));
+    }
+    _stopAlphaTween() {
+      Laya.Tween.killAll(this);
+    }
     setActive(active) {
-      UIUtils.setActive(this.root, active);
+      var _a;
+      (_a = this._renderer) == null ? void 0 : _a.setActive(active);
+      if (active) {
+        this._startTween();
+      } else {
+        this._breathPlaying = false;
+        this._stopAlphaTween();
+      }
     }
   };
+  _GuideTypeBoxFrame.PREFAB_PATH = "chessGame/prefab/guide_alpha.lh";
+  /** 透明度为 1 时的停留时间（毫秒） */
+  _GuideTypeBoxFrame.ALPHA_HOLD_MS = 1e3;
+  var GuideTypeBoxFrame = _GuideTypeBoxFrame;
   var GuideTypeArrow = class {
     setComponents(node) {
       node.zOrder = -90;
@@ -109420,6 +109967,7 @@ ${weixin_number}`,
       if (!this.follower.camera) {
         this.follower.camera = ChineseChessGame.instance.board.render.camera;
       }
+      UIUtils.setNodeCtrlStatus(this.root, data.v1 === 2 ? 1 : 0);
       this.follower.enabled = true;
       const worldPos = ChessPositionConverter.generatePosition(data.x, 9 - data.y);
       this.follower.setTargetPos(worldPos);
@@ -109432,6 +109980,194 @@ ${weixin_number}`,
       UIUtils.setActive(this.root, active);
     }
   };
+  var _GuideTypeStar = class _GuideTypeStar {
+    constructor() {
+      /** 子节点默认 y（父节点高度一半，中心对齐） */
+      this._defaultImgY = 0;
+      /** 跳动偏移，始终基于默认 y 叠加，避免误差累积 */
+      this._jumpOffset = 0;
+      /** 消失动画进度 0~1 */
+      this._disappearProgress = 0;
+      this._defaultZOrder = -100;
+      this._boardX = -1;
+      this._boardY = -1;
+      this._isDisappearing = false;
+      this._disappearCallback = null;
+    }
+    setComponents(node) {
+      node.zOrder = -100;
+      this._defaultZOrder = node.zOrder;
+      this.root = node;
+      this.img = ElemFinder.getElement(node, "img");
+      this._defaultImgY = this.root.height / 2;
+      this.follower = Sprite3DFollower.addToNode(node);
+      this.follower.enabled = false;
+    }
+    onDestroy() {
+      this._stopAllAnim(true);
+      this.follower.enabled = false;
+      this.follower.clearFollow();
+    }
+    matchesBoardPos(boardX, boardY) {
+      return Math.round(this._boardX) === Math.round(boardX) && Math.round(this._boardY) === Math.round(boardY);
+    }
+    matchesConfig(data) {
+      return Math.round(this._boardX) === Math.round(data.x) && Math.round(this._boardY) === Math.round(9 - data.y);
+    }
+    isDisappearing() {
+      return this._isDisappearing;
+    }
+    isShowing() {
+      var _a;
+      return !!((_a = this.root) == null ? void 0 : _a.visible) && !this._isDisappearing;
+    }
+    get disappearProgress() {
+      return this._disappearProgress;
+    }
+    set disappearProgress(value) {
+      this._disappearProgress = value;
+      this._applyDisappearVisual();
+    }
+    update(data) {
+      if (!this.follower.camera) {
+        this.follower.camera = ChineseChessGame.instance.board.render.camera;
+      }
+      this._boardX = data.x;
+      this._boardY = 9 - data.y;
+      this._isDisappearing = false;
+      this._stopAllAnim(true);
+      this.root.zOrder = this._defaultZOrder;
+      this.follower.uiOffsetX = 0;
+      this.follower.uiOffsetY = 0;
+      this.root.alpha = 1;
+      this.img.alpha = 1;
+      const worldPos = ChessPositionConverter.generatePosition(data.x, this._boardY);
+      this.follower.setTargetPos(worldPos);
+      this.follower.enabled = true;
+      this._startTween();
+    }
+    playCaptureDisappear() {
+      var _a;
+      if (!((_a = this.root) == null ? void 0 : _a.visible) || this._isDisappearing) {
+        return false;
+      }
+      this._isDisappearing = true;
+      this._stopAllAnim(false);
+      this.follower.enabled = false;
+      this.root.zOrder = 1e3;
+      this._disappearProgress = 0;
+      this._applyDisappearVisual();
+      Laya.Tween.create(this).to("disappearProgress", 1).duration(_GuideTypeStar.DISAPPEAR_DURATION_MS).then(this._finishDisappear, this);
+      return true;
+    }
+    playCaptureDisappearThen(callback) {
+      var _a;
+      if (this._isDisappearing) {
+        return;
+      }
+      if (!((_a = this.root) == null ? void 0 : _a.visible)) {
+        callback == null ? void 0 : callback();
+        return;
+      }
+      this._disappearCallback = callback != null ? callback : null;
+      if (!this.playCaptureDisappear()) {
+        this._disappearCallback = null;
+        callback == null ? void 0 : callback();
+      }
+    }
+    _applyDisappearVisual() {
+      this._jumpOffset = _GuideTypeStar.DISAPPEAR_UP_OFFSET * this._disappearProgress;
+      const alpha = 1 - this._disappearProgress;
+      this.root.alpha = alpha;
+      this.img.alpha = alpha;
+      this._applyJumpOffset();
+    }
+    _finishDisappear() {
+      this._isDisappearing = false;
+      this._disappearProgress = 0;
+      this._jumpOffset = 0;
+      this.root.alpha = 1;
+      this.img.alpha = 1;
+      this.root.zOrder = this._defaultZOrder;
+      this._applyJumpOffset();
+      this.follower.enabled = false;
+      UIUtils.setActive(this.root, false);
+      const callback = this._disappearCallback;
+      this._disappearCallback = null;
+      callback == null ? void 0 : callback();
+    }
+    _applyJumpOffset() {
+      this.img.y = this._defaultImgY + this._jumpOffset;
+    }
+    _resetJump() {
+      this._jumpOffset = 0;
+      this._applyJumpOffset();
+    }
+    _stopAllAnim(resetVisual) {
+      Laya.Tween.killAll(this);
+      Laya.Tween.killAll(this.root);
+      Laya.timer.clear(this, this._startTween);
+      if (resetVisual) {
+        this._resetJump();
+        this._disappearProgress = 0;
+        this.follower.uiOffsetY = 0;
+        if (this.root) {
+          this.root.alpha = 1;
+        }
+        if (this.img) {
+          this.img.alpha = 1;
+        }
+      }
+    }
+    _stopTween() {
+      this._stopAllAnim(true);
+    }
+    _startTween() {
+      this._resetJump();
+      this._playBounceRound(0);
+    }
+    _playBounceRound(round) {
+      Laya.Tween.create(this).to("_jumpOffset", -_GuideTypeStar.JUMP_HEIGHT).duration(_GuideTypeStar.BOUNCE_UP_MS).onUpdate(this._applyJumpOffset, this).then(() => {
+        Laya.Tween.create(this).to("_jumpOffset", 0).duration(_GuideTypeStar.BOUNCE_DOWN_MS).onUpdate(this._applyJumpOffset, this).then(() => {
+          if (round + 1 < _GuideTypeStar.BOUNCE_COUNT) {
+            this._playBounceRound(round + 1);
+            return;
+          }
+          Laya.timer.once(_GuideTypeStar.PAUSE_MS, this, this._startTween);
+        }, this);
+      }, this);
+    }
+    setActive(active, immediate = false) {
+      if (active) {
+        this._isDisappearing = false;
+        this._stopAllAnim(true);
+        this.root.zOrder = this._defaultZOrder;
+        UIUtils.setActive(this.root, true);
+        return;
+      }
+      if (this._isDisappearing && !immediate) {
+        return;
+      }
+      if (!immediate && this.isShowing()) {
+        this.playCaptureDisappearThen();
+        return;
+      }
+      this._disappearCallback = null;
+      this._isDisappearing = false;
+      this._stopAllAnim(true);
+      this.root.zOrder = this._defaultZOrder;
+      this.follower.enabled = false;
+      UIUtils.setActive(this.root, false);
+    }
+  };
+  _GuideTypeStar.JUMP_HEIGHT = 14;
+  _GuideTypeStar.BOUNCE_COUNT = 3;
+  _GuideTypeStar.BOUNCE_UP_MS = 120;
+  _GuideTypeStar.BOUNCE_DOWN_MS = 120;
+  _GuideTypeStar.PAUSE_MS = 2500;
+  _GuideTypeStar.DISAPPEAR_UP_OFFSET = -60;
+  _GuideTypeStar.DISAPPEAR_DURATION_MS = 500;
+  var GuideTypeStar = _GuideTypeStar;
   var GuideTypePoint = class {
     setComponents(node) {
       this.root = node;
@@ -109596,10 +110332,6 @@ ${weixin_number}`,
     constructor() {
       super(...arguments);
       /**
-       * 星引导
-       */
-      this._starRenderList = [];
-      /**
        * 引导位置
        */
       this._guideToPos = new Laya.Vector2();
@@ -109615,6 +110347,14 @@ ${weixin_number}`,
        * 棋谱移动索引
        */
       this._qiPuMoveIndex = 0;
+      /**
+       * 引导走棋动画进行中
+       */
+      this._isGuideMoving = false;
+      /**
+       * 引导走棋计时器版本号
+       */
+      this._guideMoveId = 0;
     }
     /**
      * 当前引导步骤列表
@@ -109652,22 +110392,20 @@ ${weixin_number}`,
         }
       );
       this.game.startGame();
-      this.setCurLesson(LearnData.ins().curStudyLesson);
+      this.setCurLesson(LearnData.ins().curStudyLesson, true);
     }
     isRoleModelVisible() {
       return false;
     }
     onDestroy() {
+      this.cancelGuideMoving();
       super.onDestroy();
-      this._starRenderList.forEach((item2) => {
-        item2.destroyModel();
-      });
-      this._starRenderList = [];
     }
     /**
      * 设置当前学习的引导教学
+     * @param useSavedProgress 是否读取存档进度（仅外部首次进入时为 true）
      */
-    setCurLesson(lesson) {
+    setCurLesson(lesson, useSavedProgress = false) {
       LearnData.ins().curStudyLesson = lesson;
       if (!LearnData.ins().curStudyLesson) {
         TipsManager.ins().showMessageTips("课程配置获取失败");
@@ -109681,22 +110419,25 @@ ${weixin_number}`,
         return;
       }
       let curDisplay = null;
-      for (const display of this._curDisplayList) {
-        if (LearnData.ins().getDisplayStep(display.id) >= LearnData.ins().getDisplayMaxStep(display.id)) {
-          continue;
+      if (useSavedProgress) {
+        for (const display of this._curDisplayList) {
+          if (LearnData.ins().getDisplayStep(display.id) >= LearnData.ins().getDisplayMaxStep(display.id)) {
+            continue;
+          }
+          curDisplay = display;
+          break;
         }
-        curDisplay = display;
-        break;
       }
       if (curDisplay == null) {
         curDisplay = this._curDisplayList[0];
       }
-      this.setCurDisplayGuide(curDisplay);
+      this.setCurDisplayGuide(curDisplay, useSavedProgress);
     }
     /**
      * 设置当前显示的引导步骤
+     * @param useSavedProgress 是否读取存档进度（仅外部首次进入时为 true）
      */
-    setCurDisplayGuide(displayCfg) {
+    setCurDisplayGuide(displayCfg, useSavedProgress = false) {
       if (!displayCfg) {
         TipsManager.ins().showMessageTips("课程显示配置获取失败");
         console.error("[ChessLearnLocalApp] 设置当前显示配置失败: displayCfg is null");
@@ -109705,8 +110446,12 @@ ${weixin_number}`,
       this._curDisplayCfg = displayCfg;
       this._view.updateGuideDisplay(displayCfg);
       this._curSteps = LearnData.ins().getStepList(displayCfg.id);
-      this._curStepIndex = LearnData.ins().getDisplayStep(displayCfg.id);
-      if (this._curStepIndex >= this._curSteps.length) {
+      if (useSavedProgress) {
+        this._curStepIndex = LearnData.ins().getDisplayStep(displayCfg.id);
+        if (this._curStepIndex >= this._curSteps.length) {
+          this._curStepIndex = 0;
+        }
+      } else {
         this._curStepIndex = 0;
       }
       if (this._curSteps.length == 0) {
@@ -109720,21 +110465,6 @@ ${weixin_number}`,
      */
     loadStepStage() {
       const stepData = this._curSteps[this._curStepIndex];
-      this._starRenderList.forEach((item2) => {
-        item2.destroyModel();
-      });
-      this._starRenderList = [];
-      const render = this.game.board.render;
-      if (stepData.xingx.length > 0) {
-        for (let i = 0; i < stepData.xingx.length; i++) {
-          const starPos = stepData.xingx[i];
-          const starRender = new Sprite3DRenderer(render.owner.parent);
-          this._starRenderList.push(starRender);
-          starRender.load("chessGame/prefab/starPos.lh");
-          const worldPos = ChessPositionConverter.generatePosition(starPos.x, 9 - starPos.y);
-          starRender.setPosition(worldPos);
-        }
-      }
       this.game.board.setRuntimeOptions({ inputEnabled: false });
       const filterList = this._curDisplayList.filter((item2) => item2.display_type == this._curDisplayCfg.display_type);
       const isFinalDisplay = filterList.indexOf(this._curDisplayCfg) == filterList.length - 1;
@@ -109743,6 +110473,7 @@ ${weixin_number}`,
         this._aiPlayer.cancelThinking();
         this._aiPlayer = null;
       }
+      this.cancelGuideMoving();
       if (stepData.qipu) {
         const fenColor = ChessTools.checkFenHasPlayer(stepData.qipu) ? ChessTools.getFenPlayerColor(stepData.qipu) : 0 /* RED */;
         this.game.resetPlayerColor(0 /* RED */, fenColor);
@@ -109787,7 +110518,10 @@ ${weixin_number}`,
             const fromPieceY = parseInt(params[2]);
             const toPieceX = parseInt(params[3]);
             const toPieceY = parseInt(params[4]);
-            const fromPiece = this.game.board.getPieceAt(fromPieceX, 9 - fromPieceY);
+            const fromBoardY = 9 - fromPieceY;
+            const toBoardX = toPieceX;
+            const toBoardY = 9 - toPieceY;
+            const fromPiece = this.game.board.getPieceAt(fromPieceX, fromBoardY);
             if ((fromPiece == null ? void 0 : fromPiece.type) != fromPieceType) {
               console.error("error, from piece type not match", stepData.guide_type_param);
               if (fromPiece) {
@@ -109796,7 +110530,8 @@ ${weixin_number}`,
                 TipsManager.ins().showMessageTips("没有找到目标移动棋子");
               }
             }
-            this.game.board.movePiece(this.game.step, fromPieceX, 9 - fromPieceY, toPieceX, 9 - toPieceY);
+            const moveStr = ChessTools.convertToMoveStr(fromPieceX, fromBoardY, toBoardX, toBoardY);
+            this.playGuideMoveWithPacing(moveStr, () => this.finishGuideStep());
           }
           break;
         case 5 /* MovePieceToWithQiPu */:
@@ -109818,6 +110553,7 @@ ${weixin_number}`,
           }
           break;
       }
+      this._view.updateOpButtonState();
     }
     onUpdateQiPuMove() {
       const moveStr = this._qiPuMoveList[this._qiPuMoveIndex];
@@ -109827,6 +110563,83 @@ ${weixin_number}`,
       }
       const chineseQiPu = ChessTools.convertToChineseMoveStr(this.game.board.toFen(), moveStr);
       this._view.updateGuideText(chineseQiPu);
+    }
+    /**
+     * 取消引导走棋计时
+     */
+    cancelGuideMoving() {
+      this._guideMoveId++;
+      Laya.timer.clearAll(this);
+      this._isGuideMoving = false;
+    }
+    /**
+     * 棋谱双方自走：每步走完后短暂停顿，再允许下一步操作
+     */
+    delayQiPuInputThen() {
+      const curGuideMoveId = this._guideMoveId;
+      this.game.board.setRuntimeOptions({ inputEnabled: false });
+      Laya.timer.once(500, this, () => {
+        if (curGuideMoveId != this._guideMoveId) {
+          return;
+        }
+        const stepData = this._curSteps[this._curStepIndex];
+        if ((stepData == null ? void 0 : stepData.guide_type) != 5 /* MovePieceToWithQiPu */) {
+          return;
+        }
+        this.game.board.setRuntimeOptions({ inputEnabled: true });
+        this._view.updateOpButtonState();
+      });
+    }
+    /**
+     * 带节奏的引导走棋（参考残局 AI 选子 + 延迟落子，用于自动演示）
+     */
+    playGuideMoveWithPacing(moveStr, onComplete) {
+      var _a, _b;
+      if ((_b = (_a = this.game) == null ? void 0 : _a.isGameOver) == null ? void 0 : _b.call(_a)) {
+        onComplete == null ? void 0 : onComplete();
+        return;
+      }
+      const move = ChessTools.convertFromMoveStr(moveStr);
+      const curGuideMoveId = ++this._guideMoveId;
+      const seq = this.board.getNextAnimSequence();
+      seq.onStart = () => {
+        var _a2, _b2;
+        if (curGuideMoveId != this._guideMoveId || ((_b2 = (_a2 = this.game) == null ? void 0 : _a2.isGameOver) == null ? void 0 : _b2.call(_a2))) {
+          seq.finish();
+          onComplete == null ? void 0 : onComplete();
+          return;
+        }
+        this._isGuideMoving = true;
+        Laya.timer.once(500, this, () => {
+          var _a3, _b3;
+          if (curGuideMoveId != this._guideMoveId || ((_b3 = (_a3 = this.game) == null ? void 0 : _a3.isGameOver) == null ? void 0 : _b3.call(_a3))) {
+            seq.finish();
+            this._isGuideMoving = false;
+            onComplete == null ? void 0 : onComplete();
+            return;
+          }
+          const piece = this.board.getPieceAt(move.fromX, move.fromY);
+          this.board.render.onSelectPiece((piece == null ? void 0 : piece.renderObject) || null);
+          Laya.timer.once(500, this, () => {
+            var _a4, _b4;
+            if (curGuideMoveId != this._guideMoveId || ((_b4 = (_a4 = this.game) == null ? void 0 : _a4.isGameOver) == null ? void 0 : _b4.call(_a4))) {
+              seq.finish();
+              this._isGuideMoving = false;
+              onComplete == null ? void 0 : onComplete();
+              return;
+            }
+            seq.finish();
+            this._isGuideMoving = false;
+            if (this.board.getPieceAt(move.toX, move.toY)) {
+              this._view.onGuideStarCaptured(move.toX, move.toY);
+            }
+            this.board.movePiece(this.game.step, move.fromX, move.fromY, move.toX, move.toY, void 0, void 0, () => {
+              onComplete == null ? void 0 : onComplete();
+              this._view.updateOpButtonState();
+            });
+          });
+        });
+      };
     }
     /**
      * 引导步骤完成
@@ -109890,21 +110703,38 @@ ${weixin_number}`,
         this._aiPlayer.thinking();
       }
     }
+    onSelectPiece(x, y) {
+      super.onSelectPiece(x, y);
+      if (x >= 0 && y >= 0) {
+        this._view.onPieceSelected();
+      }
+    }
+    /**
+     * 步骤完成前等待星星消失动画
+     */
+    finishGuideStep() {
+      this._view.waitGuideStarDisappearThen(() => this.onStepFinished());
+    }
     onMovePiece(fromX, fromY, toX, toY) {
       const stepData = this._curSteps[this._curStepIndex];
       const opColor = this.board.currentPlayer;
+      if (this.board.getPieceAt(toX, toY)) {
+        this._view.onGuideStarCaptured(toX, toY);
+      }
       this.board.movePiece(this.game.step, fromX, fromY, toX, toY, void 0, void 0, () => {
         switch (stepData.guide_type) {
           case 3 /* MovePieceTo */:
             {
               if (this._guideToPos.x == toX && this._guideToPos.y == toY) {
-                this.onStepFinished();
+                this.finishGuideStep();
               } else {
                 if (this._guideToMaxStep > 0) {
                   this._guideToCurStep++;
                   if (this._guideToCurStep >= this._guideToMaxStep) {
                     this.board.message(stepData.bug_txt);
                     this.board.reset();
+                    this._guideToCurStep = 0;
+                    this._view.updateOpButtonState();
                   }
                 }
               }
@@ -109912,7 +110742,7 @@ ${weixin_number}`,
             break;
           case 4 /* AutoMovePieceTo */:
             {
-              this.onStepFinished();
+              this.finishGuideStep();
             }
             break;
           case 5 /* MovePieceToWithQiPu */:
@@ -109922,19 +110752,22 @@ ${weixin_number}`,
               if (nextMove.toX == toX && nextMove.toY == toY && nextMove.fromX == fromX && nextMove.fromY == fromY) {
                 this._qiPuMoveIndex++;
                 if (this._qiPuMoveIndex >= this._qiPuMoveList.length) {
-                  this.onStepFinished();
+                  this.finishGuideStep();
                 } else {
                   this.onUpdateQiPuMove();
+                  this.delayQiPuInputThen();
                 }
               } else {
                 this.board.message(stepData.bug_txt);
                 this.board.undoMove(opColor, 0, () => {
                   this.onUpdateQiPuMove();
+                  this._view.updateOpButtonState();
                 });
               }
             }
             break;
         }
+        this._view.updateOpButtonState();
       });
     }
     /**主动退出游戏 */
@@ -109957,10 +110790,12 @@ ${weixin_number}`,
             } else {
               this.board.message(stepData.bug_txt);
               this.board.reset();
+              this._view.updateOpButtonState();
             }
           }
           break;
       }
+      this._view.updateOpButtonState();
     }
   };
 
@@ -113780,7 +114615,7 @@ ${weixin_number}`,
       });
     }
     loadVersionInfoByUrl(baseUrl, gameId, onSuccess, onError) {
-      const url = `${baseUrl}/games/${gameId}.json?v=${Date.now()}`;
+      const url = `${baseUrl}/games/${gameId}.json?no_cache=1&v=${Date.now()}`;
       Laya.loader.load(url, Laya.Handler.create(this, (data) => {
         var _a;
         if (!data || !data.data || data.data.length <= 0) {

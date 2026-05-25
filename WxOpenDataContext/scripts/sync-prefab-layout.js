@@ -414,9 +414,12 @@ function buildItemStyles(itemEntry, roles, uuidMap, rowGap) {
     const btnCx = num(btnInvite && btnInvite.x);
     const btnW = num(btnInvite && btnInvite.width);
     const btnH = num(btnInvite && btnInvite.height);
-    const btnRight = itemW - btnCx - btnW * 0.5;
+    const btnAnchorX = num(btnInvite && btnInvite.anchorX, 0);
+    const btnAnchorY = num(btnInvite && btnInvite.anchorY, 0);
+    const btnLeft = num(btnInvite && btnInvite.x) - btnW * btnAnchorX;
+    const btnTop = num(btnInvite && btnInvite.y) - btnH * btnAnchorY;
+    const btnRight = itemW - btnCx - btnW * (1 - btnAnchorX);
     const nickMarginLeft = Math.max(0, nickX - headX - headSize);
-    const btnMarginLeft = Math.max(0, btnCx - btnW * 0.5 - nickX - nickW);
     const itemBgY = num(imgBg && imgBg.y);
     const itemBgH = num(imgBg && imgBg.height);
     const itemPaddingTop = itemBgY + Math.max(0, (itemBgH - headSize) * 0.5);
@@ -460,23 +463,20 @@ function buildItemStyles(itemEntry, roles, uuidMap, rowGap) {
                 height: nickH,
                 marginLeft: nickMarginLeft,
             }),
-            itemBtnWrap: {
-                width: btnW,
-                height: btnH,
-                marginLeft: btnMarginLeft,
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-            },
             itemBtn: {
+                position: "absolute",
+                left: Math.round(btnLeft),
+                top: Math.round(btnTop),
                 width: btnW,
                 height: btnH,
             },
             itemBtnText: Object.assign(
                 textStyleFromNode(txtBtnTitle || {}, {
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
                     width: btnW,
                     height: btnH,
-                    marginTop: -btnH,
                     textAlign: "center",
                     lineHeight: btnH,
                 })
@@ -593,10 +593,11 @@ const tplfnBlock = [
     '            out += \'<view class="itemRow">\';',
     '            out += \'<image class="itemHead" src="\' + escapeAttr(avatar) + \'"></image>\';',
     `            out += '<text class="itemNick" value="\' + escapeAttr(item.nickName || ${jsonString(SYNC_HINTS.nickFallback)}) + \'"></text>';`,
-    '            out += \'<view class="itemBtnWrap">\';',
-    `            out += '<image id="btn_' + i + '" class="itemBtn" src="${itemLayout.btnPath}"></image>';`,
+    '            out += \'</view>\';',
+    `            out += '<image id="btn_' + i + '" class="itemBtn" src="${itemLayout.btnPath}">';`,
     `            out += '<text class="itemBtnText" value=${itemLayout.inviteText}></text>';`,
-    '            out += "</view></view></view>";',
+    `            out += '</image>';`,
+    '            out += "</view>";',
     "        }",
     '        out += "</scrollview>";',
     "    }",
