@@ -8,16 +8,22 @@
 module.exports = function createStyle(options) {
     options = options || {};
 
-    const viewPort = options.viewPort || null;
-    const listHeight =
-        viewPort && Number(viewPort.height) > 0
-            ? Number(viewPort.height)
-            : 1189;
+    const canvasWidth = Number(options.canvasWidth) > 0 ? Number(options.canvasWidth) : 720;
+    const canvasHeight = Number(options.canvasHeight) > 0 ? Number(options.canvasHeight) : 1280;
+
+    // 根布局尺寸使用实际 sharedCanvas 尺寸
+    // 因为 engine 源码里 root/style.width height 决定 renderport
+    // 而 sharedCanvas 不能动态改时，root 也不适合盲目大于 canvas 实际尺寸
+    const rootWidth = canvasWidth;
+    const rootHeight = canvasHeight;
+    const listHeight = rootHeight ;
+
+    console.error(Number(options.canvasHeight),listHeight)
 
     return {
         container: {
-            width: 720,
-            height: 1280,
+            width: rootWidth,
+            height: rootHeight,
             flexDirection: "column",
         },
         list: {
@@ -27,7 +33,6 @@ module.exports = function createStyle(options) {
             marginTop: 0,
             scrollY: true,
             flexDirection: "column",
-            alignItems: "center",
         },
         emptyText: {
             width: 696,

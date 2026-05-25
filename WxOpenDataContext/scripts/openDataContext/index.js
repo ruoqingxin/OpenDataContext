@@ -25,8 +25,6 @@ let shareConfig = {
 
 let users = [];
 let visible = false;
-let viewportReady = false;
-let pendingDraw = false;
 let loadingFriends = false;
 let loadedFriends = false;
 let imagesReady = false;
@@ -255,7 +253,7 @@ function bindInviteEvents() {
 }
 
 function draw() {
-    if (!visible || !viewportReady) {
+    if (!visible) {
         return;
     }
 
@@ -264,6 +262,9 @@ function draw() {
 
         const style = createStyle({
             viewPort: currentViewPort,
+            canvasWidth: sharedCanvas.width || 720,
+            canvasHeight: sharedCanvas.height || 1280,
+            dataLength: users.length,
         });
 
         Layout.clear();
@@ -271,27 +272,6 @@ function draw() {
         Layout.layout(sharedContext);
         bindInviteEvents();
     });
-}
-
-function requestDraw() {
-    pendingDraw = true;
-    if (!visible || !viewportReady) {
-        return;
-    }
-    pendingDraw = false;
-    draw();
-}
-
-function applyViewPort(box) {
-    if (!box || !box.width || !box.height) {
-        return;
-    }
-    currentViewPort = box;
-    Layout.updateViewPort(box);
-    viewportReady = true;
-    if (visible) {
-        requestDraw();
-    }
 }
 
 function showInvite(message) {
@@ -304,13 +284,11 @@ function showInvite(message) {
     };
 
     visible = true;
-    loadFriends(requestDraw);
+    loadFriends(draw);
 }
 
 function hideInvite() {
     visible = false;
-    pendingDraw = false;
-    viewportReady = false;
     Layout.clear();
 }
 
@@ -322,7 +300,13 @@ function init() {
 
         switch (data.type) {
             case OpenDataCommand.UpdateViewPort:
-                applyViewPort(data.box);
+                if (data.box) {
+                    currentViewPort = data.box;
+                    Layout.updateViewPort(data.box);
+                }
+                if (visible) {
+                    draw();
+                }
                 break;
 
             case OpenDataCommand.ShowInviteFriend:
