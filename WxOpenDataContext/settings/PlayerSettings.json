@@ -1,6 +1,0 @@
-{
-    "modules": {
-        "laya.ui": true,
-        "laya.d3": false
-    }
-}
