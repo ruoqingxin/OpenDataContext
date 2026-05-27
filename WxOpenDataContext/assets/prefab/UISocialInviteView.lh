@@ -1,0 +1,151 @@
+{
+  "_$ver": 1,
+  "_$id": "lfnfkm0w",
+  "_$type": "GWidget",
+  "name": "UISocialInviteView",
+  "width": 535,
+  "height": 779,
+  "_$comp": [
+    {
+      "_$type": "3593fc26-337e-42e3-92dc-1b9c2bb8f988",
+      "scriptPath": "../src/script/sfgames/ui/components/ElementMapper.ts",
+      "adapter": null,
+      "elements": [
+        {
+          "_$ref": "xn2706ta"
+        },
+        {
+          "_$ref": "go4aisyk"
+        }
+      ],
+      "prefabs": null,
+      "mapperType": 1
+    }
+  ],
+  "_$child": [
+    {
+      "_$id": "m8o837qx",
+      "_$type": "GList",
+      "name": "list_items",
+      "width": 535,
+      "height": 779,
+      "relations": [
+        {
+          "_$type": "Relation",
+          "data": [
+            2,
+            0
+          ]
+        }
+      ],
+      "layout": {
+        "type": 1,
+        "rowGap": 5
+      },
+      "scroller": {
+        "_$type": "Scroller",
+        "barDisplay": 5
+      },
+      "_templateNode": {
+        "_$ref": "6tgm8fku",
+        "_$tmpl": "itemTemplate"
+      },
+      "_initItemNum": 6,
+      "_$child": [
+        {
+          "_$id": "6tgm8fku",
+          "_$type": "GWidget",
+          "name": "item",
+          "width": 535,
+          "height": 135,
+          "_$child": [
+            {
+              "_$id": "suxgsit7",
+              "_$type": "GImage",
+              "name": "img_bg",
+              "width": 535,
+              "height": 134,
+              "src": "res://c407736c-317a-4386-86bf-707da3bd8bac",
+              "autoSize": false
+            },
+            {
+              "_$id": "lpntycs6",
+              "_$type": "GTextField",
+              "name": "txt_nick",
+              "x": 144,
+              "y": 49,
+              "width": 270,
+              "height": 37,
+              "text": "玩家昵称",
+              "fontSize": 32,
+              "color": "#8a5839",
+              "valign": "middle",
+              "strokeColor": "#373899"
+            },
+            {
+              "_$id": "8jploftc",
+              "_$type": "GLoader",
+              "name": "img_head",
+              "x": 82,
+              "y": 65,
+              "width": 100,
+              "height": 100,
+              "anchorX": 0.5,
+              "anchorY": 0.5,
+              "scaleX": 0.8,
+              "scaleY": 0.8,
+              "src": "res://d12d7eb3-1ad8-470a-80c6-9e7c92c9fe35"
+            },
+            {
+              "_$id": "y4zr7zr4",
+              "_$type": "GImage",
+              "name": "btn_invite",
+              "x": 426,
+              "y": 67,
+              "width": 161,
+              "height": 64,
+              "anchorX": 0.5,
+              "anchorY": 0.5,
+              "src": "res://7e833e8f-f5a3-4e23-b9dd-457f436592c5",
+              "autoSize": false,
+              "_$comp": [
+                {
+                  "_$type": "5f45c17e-dc7e-487c-b0d5-8383cd3b8c47",
+                  "scriptPath": "../src/script/sfgames/ui/components/UIScaleButton.ts",
+                  "tweenTarget": null
+                }
+              ],
+              "_$child": [
+                {
+                  "_$id": "vtj1g8pr",
+                  "_$type": "GTextField",
+                  "name": "txt_title",
+                  "x": 81,
+                  "y": 23,
+                  "width": 149,
+                  "height": 46,
+                  "anchorX": 0.5,
+                  "anchorY": 0.5,
+                  "text": "邀请",
+                  "fontSize": 30,
+                  "color": "#f8fde4",
+                  "html": true,
+                  "align": "center",
+                  "valign": "middle",
+                  "padding": [
+                    11,
+                    2,
+                    2,
+                    2
+                  ],
+                  "stroke": 4,
+                  "strokeColor": "#4d7b26"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
