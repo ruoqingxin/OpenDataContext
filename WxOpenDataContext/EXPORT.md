@@ -1,98 +1,155 @@
 # 开放域导出说明
 
-标准 Layout 方案：`engine.js`（minigame-canvas-engine）+ `template/style` + `index.js`。  
-视觉以 IDE 中 prefab 为设计源，由 sync 脚本生成 Layout 渲染文件。
+标准 Layout 方案：`engine.js`（minigame-canvas-engine）+ `render/style.js` + `render/tplfn.js` + `render/assets.js`。
 
-## 改 UI 的流程
+视觉以 IDE 中 prefab 为设计源，由 `sync-prefab-layout.js` 生成三个 render 文件。
 
-```
-1. IDE 编辑 assets/prefab/UIGameRoomView.lh
-        ↓
-2. prefab-to-style.js       ← 同步 prefab → render/style.js
-        ↓
-3. deploy-to-main.ps1       ← 无需 Laya IDE 构建
-        ↓
-4. openDataContext/ 部署到主工程
-```
+---
 
-### 命令
+## 调用方法
+
+**所有命令均在 `WxOpenDataContext` 项目根目录下执行**（即包含 `assets/`、`scripts/` 的目录）。
+
+### 1. 同步 prefab → render（改 UI 后必跑）
+
+根据 `assets/prefab/UISocialInviteView.lh` 生成：
+
+| 输出文件 |
+|----------|
+| `scripts/openDataContext/views/inviteFriend/render/style.js` |
+| `scripts/openDataContext/views/inviteFriend/render/assets.js` |
+| `scripts/openDataContext/views/inviteFriend/render/tplfn.js` |
+
+**推荐（使用默认路径，无需参数）：**
 
 ```powershell
-# 改完 prefab 后执行
-node .\WxOpenDataContext\scripts\prefab-to-style.js
-# 或
-.\WxOpenDataContext\scripts\sync-prefab-layout.ps1
-
-# 首次或升级 Layout 引擎
-npm install minigame-canvas-engine --prefix .\WxOpenDataContext\scripts
-
-# 部署到 WxProgrom 测试包（本项目默认路径）：
-.\WxOpenDataContext\scripts\deploy-to-wxprogrom.ps1
-
-# 部署到其它主工程小游戏根目录：
-.\WxOpenDataContext\scripts\deploy-to-wxprogrom.ps1 -TargetDir "E:\yourGame\openDataContext"
+node scripts\sync-prefab-layout.js
 ```
 
-`prefab-to-style.js` 会更新：
+**等价写法：**
 
-| 自动生成区域 | 文件 |
-|-------------|------|
-| Layout 样式（静态对象） | `scripts/openDataContext/render/style.js` |
+```powershell
+.\scripts\sync-prefab-layout.ps1
+```
 
-### 节点识别规则（无需写死每个名字）
+**自定义 prefab / 输出目录（一般不需要）：**
 
-sync 会先建立 prefab 全树索引，再按规则自动识别：
+```powershell
+node scripts\sync-prefab-layout.js `
+  --prefab assets/prefab/UISocialInviteView.lh `
+  --out-dir scripts/openDataContext/views/inviteFriend/render
+```
 
-| 角色 | 识别方式 |
-|------|----------|
-| 列表 | 第一个 `GList`（优先匹配 `list_items`） |
-| 列表项模板 | `GList._templateNode` 引用，或名为 `item` 的子节点 |
-| 行背景 | 名为 `img` 的 `GImage`，或宽度接近 item 宽度的 `GImage` |
-| 头像 | 名称含 `head`/`avatar` 的 `GLoader`/`GImage` |
-| 昵称 | 名称含 `nick` 的文本节点 |
-| 邀请按钮 | 名称含 `btn_invite`/`invite` 的 `GImage` |
-| 按钮文字 | 按钮节点下的 `GTextField` |
-| 静态节点 | prefab 根节点下、列表以外的所有节点（自动绝对定位同步） |
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--prefab` | `assets/prefab/UISocialInviteView.lh` | Laya prefab 源文件 |
+| `--out-dir` | `scripts/openDataContext/views/inviteFriend/render` | 生成的三个 JS 输出目录 |
 
-若有歧义会在控制台警告并取第一个匹配。可在 `sync-prefab-layout.js` 顶部 `SYNC_HINTS` 里覆盖列表名、空态文案等。
+成功时控制台会打印 prefab 路径、style 节点名、图片资源名及三个输出文件路径。
 
-标记为 `// @prefab-sync-start` … `// @prefab-sync-end` 的区块请勿手改。
+---
 
-若 prefab 比 `render/style.js` 新，deploy 会报错提示先 sync。
+### 2. 部署到微信小游戏工程
 
-## 运行时加载链（LayaAir 标准流程）
+将 `scripts/openDataContext` 与图片复制到主工程的 `openDataContext` 目录。
+
+**默认部署路径：**
+
+```powershell
+.\scripts\deploy-to-wxprogrom.ps1
+```
+
+默认目标：`E:\BallOpenDataContext\WxProgrom\openDataContext`
+
+**指定其它主工程目录：**
+
+```powershell
+.\scripts\deploy-to-wxprogrom.ps1 -TargetDir "E:\yourGame\openDataContext"
+```
+
+**从主工程 client 资源补图（本地 `assets/image` 没有 png 时）：**
+
+```powershell
+.\scripts\deploy-to-wxprogrom.ps1 -PoolClientAssets "F:\PoolBallNew\client2\assets"
+```
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `-TargetDir` | `E:\BallOpenDataContext\WxProgrom\openDataContext` | 微信小游戏内 `openDataContext` 目录 |
+| `-PoolClientAssets` | `F:\PoolBallNew\client2\assets` | 主工程 assets，用于覆盖复制缺失的图片 |
+
+部署前会检查：若 prefab 比 `style.js` 新，脚本会报错并提示先执行同步。
+
+---
+
+### 3. 完整工作流（日常）
+
+```powershell
+# 1. 在 Laya IDE 中编辑并保存
+#    assets/prefab/UISocialInviteView.lh
+
+# 2. 同步生成 render 三件套
+node scripts\sync-prefab-layout.js
+
+# 3. 部署到微信小游戏工程
+.\scripts\deploy-to-wxprogrom.ps1
+```
+
+---
+
+### 4. 其它
+
+**首次或升级 Layout 引擎：**
+
+```powershell
+npm install minigame-canvas-engine --prefix scripts
+```
+
+**不要手改** `// @prefab-sync-start` … `// @prefab-sync-end` 之间的内容；改 prefab 后重新跑同步即可。
+
+---
+
+## 改 UI 流程示意
 
 ```
-index.js
-  → render/style.js + render/tplfn.js
+IDE 编辑 UISocialInviteView.lh
+        ↓
+node scripts\sync-prefab-layout.js
+        ↓
+.\scripts\deploy-to-wxprogrom.ps1
+        ↓
+微信开发者工具 / 真机验证
+```
+
+## 运行时加载链
+
+```
+views/inviteFriend/index.js
+  → render/style.js + render/tplfn.js + render/assets.js
   → engine.js (Layout)
   → wx.getSharedCanvas() 绘制
-  → image/*.png
+  → openDataContext/image/*.png
 ```
-
-对应文档中的四步渲染：
-
-1. `Layout.updateViewPort(box)` — 主域 `OpenDataContextView` 自动发送
-2. `Layout.clear()`
-3. `Layout.init(template, style)`
-4. `Layout.layout(sharedContext)`
 
 ## 源码结构
 
 ```
-scripts/
-  openDataContext/
-    index.js                 # wx.onMessage + getFriendCloudStorage + Layout 渲染
-    weapp-adapter.js         # 微信小游戏 DOM/Canvas 适配层（deploy 时复制）
-    render/
-      style.js               # prefab 同步的 Layout 样式
-      tplfn.js               # prefab 同步的模板函数
-  libs/engine.js             # minigame-canvas-engine（deploy 时复制）
-assets/
-  prefab/UIGameRoomView.lh  # 设计源（仅 IDE 用）
-  image/*.png
-src/
-  Main.ts                    # IDE 占位脚本，开放域不依赖 bundle
+WxOpenDataContext/
+  assets/
+    prefab/UISocialInviteView.lh    # 设计源
+    image/*.png                     # 开放域图片（含 .meta UUID）
+  scripts/
+    sync-prefab-layout.js           # prefab → render 同步
+    sync-prefab-layout.ps1          # 同上（PowerShell 入口）
+    deploy-to-wxprogrom.ps1         # 部署到主工程
+    openDataContext/
+      views/inviteFriend/
+        index.js
+        render/
+          style.js
+          tplfn.js
+          assets.js
+    libs/engine.js
 ```
 
 ## 主域消息协议

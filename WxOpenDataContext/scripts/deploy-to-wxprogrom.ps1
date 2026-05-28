@@ -1,4 +1,12 @@
-# 将开放域脚本与资源部署到 WxProgrom/openDataContext（微信小游戏根目录）
+# 将开放域脚本与资源部署到微信小游戏 openDataContext 目录
+#
+# 用法（在 WxOpenDataContext 项目根目录）：
+#   .\scripts\deploy-to-wxprogrom.ps1
+#   .\scripts\deploy-to-wxprogrom.ps1 -TargetDir "E:\yourGame\openDataContext"
+#   .\scripts\deploy-to-wxprogrom.ps1 -PoolClientAssets "F:\PoolBallNew\client2\assets"
+#
+# 部署前若 prefab 比 style.js 新会报错，请先： node scripts\sync-prefab-layout.js
+# 详见项目根目录 EXPORT.md
 param(
     [string]$TargetDir = "E:\BallOpenDataContext\WxProgrom\openDataContext",
     [string]$PoolClientAssets = "F:\PoolBallNew\client2\assets"
@@ -9,7 +17,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $srcOd = Join-Path $root "scripts\openDataContext"
 $srcEngine = Join-Path $root "scripts\libs\engine.js"
 $srcImg = Join-Path $root "assets\image"
-$prefabPath = Join-Path $root "assets\prefab\UIGameRoomView.lh"
+$prefabPath = Join-Path $root "assets\prefab\UISocialInviteView.lh"
 $stylePath = Join-Path $srcOd "views\inviteFriend\render\style.js"
 
 if (-not (Test-Path $srcOd)) { throw "Missing source: $srcOd" }
@@ -17,7 +25,7 @@ if (-not (Test-Path $srcEngine)) { throw "Missing engine: $srcEngine" }
 
 if ((Test-Path $prefabPath) -and (Test-Path $stylePath)) {
     if ((Get-Item $prefabPath).LastWriteTime -gt (Get-Item $stylePath).LastWriteTime) {
-        throw "prefab 比 style.js 新，请先运行: node scripts\prefab-to-style.js"
+        throw "prefab 比 style.js 新，请先运行: node scripts\sync-prefab-layout.js"
     }
 }
 
@@ -56,7 +64,7 @@ Copy-Item $srcEngine (Join-Path $TargetDir "engine.js") -Force
 
 $imageNames = Get-ViewImageNames $srcOd
 if ($imageNames.Count -eq 0) {
-    $imageNames = @("icon_800000.png", "ui_btn_yellow.png", "ui_lt_dgx.png")
+    $imageNames = @("icon_800000.png", "ui_btn_ty_g2.png", "ui_frame_qswj_d.png")
 }
 
 foreach ($name in $imageNames) {
@@ -65,9 +73,9 @@ foreach ($name in $imageNames) {
 }
 
 $poolOverrides = @{
-    "ui_btn_yellow.png" = Join-Path $PoolClientAssets "ui\atlas\common\button\newbutton\ui_btn_yellow.png"
-    "ui_lt_dgx.png"     = Join-Path $PoolClientAssets "ui\atlas\module\poolGameRoom\roomCreateNew\ui_lt_dgx.png"
-    "icon_800000.png"   = Join-Path $PoolClientAssets "ui\image\headIcon\icon_800000.png"
+    "ui_btn_ty_g2.png"      = Join-Path $PoolClientAssets "ui\atlas\common\button\newbutton\ui_btn_ty_g2.png"
+    "ui_frame_qswj_d.png"   = Join-Path $PoolClientAssets "ui\atlas\module\poolGameRoom\roomCreateNew\ui_frame_qswj_d.png"
+    "icon_800000.png"       = Join-Path $PoolClientAssets "ui\image\headIcon\icon_800000.png"
 }
 foreach ($kv in $poolOverrides.GetEnumerator()) {
     if ($imageNames -contains $kv.Key -and (Test-Path $kv.Value)) {

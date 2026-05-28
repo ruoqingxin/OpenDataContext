@@ -1,6 +1,6 @@
 /**
- * Layout 样式 — 由 assets/prefab/UIGameRoomView.lh 转换
- * 标记 @prefab-sync-start … @prefab-sync-end 区块供 prefab-to-style.js 覆盖，请勿手改。
+ * Layout 样式 — 由 assets/prefab/UISocialInviteView.lh 转换
+ * 标记 @prefab-sync-start … @prefab-sync-end 区块供 sync-prefab-layout.js 覆盖，请勿手改。
  */
 // @prefab-sync-start
 module.exports = {
@@ -23,6 +23,13 @@ module.exports = {
     height: 135,
     position: "relative",
     flexShrink: 0,
+  },
+  img_bg: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    width: 535,
+    height: 134,
   },
   img_head: {
     position: "absolute",
@@ -73,13 +80,6 @@ module.exports = {
     color: "#999999",
     textAlign: "center",
     verticalAlign: "middle",
-  },
-  img_bg: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    width: 535,
-    height: 134,
   }
 };
 // @prefab-sync-end
