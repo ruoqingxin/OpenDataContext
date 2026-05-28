@@ -59,7 +59,7 @@ node scripts\sync-prefab-layout.js `
 .\scripts\deploy-to-wxprogrom.ps1
 ```
 
-默认目标：`E:\BallOpenDataContext\WxProgrom\openDataContext`
+默认目标：`E:\OpenDataContext\WxProgrom\openDataContext`
 
 **指定其它主工程目录：**
 
@@ -67,16 +67,11 @@ node scripts\sync-prefab-layout.js `
 .\scripts\deploy-to-wxprogrom.ps1 -TargetDir "E:\yourGame\openDataContext"
 ```
 
-**从主工程 client 资源补图（本地 `assets/image` 没有 png 时）：**
-
-```powershell
-.\scripts\deploy-to-wxprogrom.ps1 -PoolClientAssets "F:\PoolBallNew\client2\assets"
-```
-
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `-TargetDir` | `E:\BallOpenDataContext\WxProgrom\openDataContext` | 微信小游戏内 `openDataContext` 目录 |
-| `-PoolClientAssets` | `F:\PoolBallNew\client2\assets` | 主工程 assets，用于覆盖复制缺失的图片 |
+| `-TargetDir` | `E:\OpenDataContext\WxProgrom\openDataContext` | 微信小游戏内 `openDataContext` 目录 |
+
+图片仅从本项目 `assets/image/` 复制；若文件缺失，部署时会输出警告。
 
 部署前会检查：若 prefab 比 `style.js` 新，脚本会报错并提示先执行同步。
 

@@ -3,13 +3,11 @@
 # 用法（在 WxOpenDataContext 项目根目录）：
 #   .\scripts\deploy-to-wxprogrom.ps1
 #   .\scripts\deploy-to-wxprogrom.ps1 -TargetDir "E:\yourGame\openDataContext"
-#   .\scripts\deploy-to-wxprogrom.ps1 -PoolClientAssets "F:\PoolBallNew\client2\assets"
 #
 # 部署前若 prefab 比 style.js 新会报错，请先： node scripts\sync-prefab-layout.js
 # 详见项目根目录 EXPORT.md
 param(
-    [string]$TargetDir = "E:\BallOpenDataContext\WxProgrom\openDataContext",
-    [string]$PoolClientAssets = "F:\PoolBallNew\client2\assets"
+    [string]$TargetDir = "E:\OpenDataContext\WxProgrom\openDataContext"
 )
 
 $ErrorActionPreference = "Stop"
@@ -69,17 +67,10 @@ if ($imageNames.Count -eq 0) {
 
 foreach ($name in $imageNames) {
     $p = Join-Path $srcImg $name
-    if (Test-Path $p) { Copy-Item $p (Join-Path $TargetDir "image\$name") -Force }
-}
-
-$poolOverrides = @{
-    "ui_btn_ty_g2.png"      = Join-Path $PoolClientAssets "ui\atlas\common\button\newbutton\ui_btn_ty_g2.png"
-    "ui_frame_qswj_d.png"   = Join-Path $PoolClientAssets "ui\atlas\module\poolGameRoom\roomCreateNew\ui_frame_qswj_d.png"
-    "icon_800000.png"       = Join-Path $PoolClientAssets "ui\image\headIcon\icon_800000.png"
-}
-foreach ($kv in $poolOverrides.GetEnumerator()) {
-    if ($imageNames -contains $kv.Key -and (Test-Path $kv.Value)) {
-        Copy-Item $kv.Value (Join-Path $TargetDir "image\$($kv.Key)") -Force
+    if (Test-Path $p) {
+        Copy-Item $p (Join-Path $TargetDir "image\$name") -Force
+    } else {
+        Write-Warning "Missing image: $p"
     }
 }
 
