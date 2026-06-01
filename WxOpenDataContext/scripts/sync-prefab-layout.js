@@ -100,13 +100,37 @@ function findItemTemplate(listNode) {
   return (listNode._$child || []).find((c) => c.name === "item") || null;
 }
 
+function getScale(node) {
+  return {
+    x: num(node.scaleX, 1),
+    y: num(node.scaleY, 1),
+  };
+}
+
+/** Laya 的 x/y 以锚点为准；Layout 以左上角为准，需换算 */
+function getTopLeft(node) {
+  const scale = getScale(node);
+  const w = num(node.width, 0);
+  const h = num(node.height, 0);
+  const ax = num(node.anchorX, 0);
+  const ay = num(node.anchorY, 0);
+
+  return {
+    left: num(node.x, 0) - w * ax * scale.x,
+    top: num(node.y, 0) - h * ay * scale.y,
+  };
+}
+
 function absBox(node) {
+  const scale = getScale(node);
+  const tl = getTopLeft(node);
+
   return {
     position: "absolute",
-    left: num(node.x, 0),
-    top: num(node.y, 0),
-    width: num(node.width),
-    height: num(node.height),
+    left: tl.left,
+    top: tl.top,
+    width: num(node.width) * scale.x,
+    height: num(node.height) * scale.y,
   };
 }
 
@@ -130,7 +154,29 @@ function textBox(node) {
       style.textStrokeWidth = 1;
     }
   }
+  if (Array.isArray(node.padding) && node.padding.length >= 4) {
+    style.paddingTop = num(node.padding[0], 0);
+    style.paddingRight = num(node.padding[1], 0);
+    style.paddingBottom = num(node.padding[2], 0);
+    style.paddingLeft = num(node.padding[3], 0);
+  }
   return style;
+}
+
+/** 将子节点区域居中到父节点内（Layout 以左上角定位，嵌套文本需按父容器居中） */
+function centerInParent(child, parent) {
+  const parentScale = getScale(parent);
+  const childScale = getScale(child);
+  const parentTL = getTopLeft(parent);
+  const parentW = num(parent.width, 0) * parentScale.x;
+  const parentH = num(parent.height, 0) * parentScale.y;
+  const childW = num(child.width, 0) * childScale.x;
+  const childH = num(child.height, 0) * childScale.y;
+
+  return {
+    left: parentTL.left + (parentW - childW) / 2,
+    top: parentTL.top + (parentH - childH) / 2,
+  };
 }
 
 function flattenItemNodes(itemNode) {
@@ -170,8 +216,9 @@ function flattenItemNodes(itemNode) {
     const txt = (btn._$child || []).find((c) => c.name === "txt_title");
     if (txt) {
       const merged = textBox(txt);
-      merged.left = num(btn.x, 0) + num(txt.x, 0);
-      merged.top = num(btn.y, 0) + num(txt.y, 0);
+      const centered = centerInParent(txt, btn);
+      merged.left = centered.left;
+      merged.top = centered.top;
       const idx = result.findIndex((r) => r.name === "txt_title");
       if (idx >= 0) {
         result[idx].style = merged;
